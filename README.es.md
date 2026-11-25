@@ -55,10 +55,7 @@ uv venv && uv pip install -e ".[dev]"
 
 ```text
 openlive               abre el panel (la primera vez: eliges plataformas e inicias sesión)
-openlive <canal>       ve un canal de Twitch directamente
 openlive --text        muestra quién está en directo y sale (también al usar una tubería: openlive | less)
-openlive --login       inicia sesión en Twitch desde la terminal, sin el panel
-openlive --logout      cierra la sesión de Twitch y borra el token guardado
 openlive --demo        canales inventados
 openlive --lang en     idioma de la interfaz (por defecto: el del sistema)
 ```
@@ -103,7 +100,7 @@ Ficheros que guarda:
 
 En Windows están en `%APPDATA%\openlive` y `%LOCALAPPDATA%\openlive`. `$OPENLIVE_CONFIG` y `$OPENLIVE_DATA_DIR` los cambian.
 
-**No incluye:** chat dentro de la terminal; VODs, clips ni vídeos normales de YouTube; Explorar y Buscar en Kick o YouTube (no hay API pública para eso); `openlive <canal>` para Kick o YouTube. Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
+**No incluye:** chat dentro de la terminal; VODs, clips ni vídeos normales de YouTube; Explorar y Buscar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
 
 **Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick y YouTube. Sin analíticas.
 

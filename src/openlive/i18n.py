@@ -42,22 +42,15 @@ def t(s, **kw):
 
 ES = {
     # cli
-    "Who you follow is live on Twitch, in the terminal.": "Quién de los que sigues está en directo en Twitch, en la terminal.",
-    "watch this channel right away": "ver este canal directamente",
+    "Who you watch is live on Twitch, Kick and YouTube, in the terminal.": "Quién de los que ves está en directo en Twitch, Kick y YouTube, en la terminal.",
     "print who is live and exit, no TUI": "muestra quién está en directo y sale, sin TUI",
-    "sign in with Twitch from the terminal": "inicia sesión en Twitch desde la terminal",
-    "sign out and forget the saved token": "cierra la sesión y borra el token guardado",
     "explore with made-up channels (reads nothing, writes nothing)": "prueba con canales inventados (no lee ni escribe nada)",
     "interface language": "idioma de la interfaz",
-    "Signed out.": "Sesión cerrada.",
-    "Signed in as {login}": "Sesión iniciada como {login}",
-    "No Twitch Client ID set (client_id in {path}).": "No hay Client ID de Twitch (client_id en {path}).",
-    "Open {url} and enter this code: {code}": "Abre {url} e introduce este código: {code}",
-    "The code expired. Try again.": "El código ha caducado. Vuelve a intentarlo.",
-    "Not signed in. Run openlive (or openlive --login) to sign in with Twitch.": "No has iniciado sesión. Abre openlive (u openlive --login) para entrar con Twitch.",
     "Nobody you follow is live right now.": "Ninguno de los canales que sigues está en directo ahora.",
     "error": "error",
     # login
+    "Signed in as {login}": "Sesión iniciada como {login}",
+    "The code expired. Try again.": "El código ha caducado. Vuelve a intentarlo.",
     "Sign in with Twitch": "Inicia sesión con Twitch",
     "openlive only asks to read who you follow. It can't chat, follow or change anything.": "openlive solo pide leer a quién sigues. No puede escribir en el chat, seguir canales ni cambiar nada.",
     "1. Open the link (o) and log in to Twitch if asked.": "1. Abre el enlace (o) e inicia sesión en Twitch si te lo pide.",
@@ -115,6 +108,7 @@ ES = {
     "streamlink isn't installed. Reinstall openlive or run: pipx install streamlink": "streamlink no está instalado. Reinstala openlive o ejecuta: pipx install streamlink",
     "No video player found. Install mpv (https://mpv.io), IINA or VLC, or set player in the config.": "No se encontró ningún reproductor. Instala mpv (https://mpv.io), IINA o VLC, o configura player en el fichero de configuración.",
     # platforms
+    "Twitch: not signed in. Open openlive and press l to sign in.": "Twitch: sin sesión. Abre openlive y pulsa l para entrar.",
     "Add": "Añadir",
     "Add Kick or YouTube channels": "Añadir canales de Kick o YouTube",
     "Add channels": "Añadir canales",
@@ -147,7 +141,6 @@ ES = {
     "Sign out of Twitch": "Cerrar sesión de Twitch",
     "This tab needs a Twitch sign-in (press l).": "Esta pestaña necesita la sesión de Twitch (pulsa l).",
     "Twitch: not signed in · l": "Twitch: sin sesión · l",
-    "Twitch: not signed in. Run openlive (or openlive --login) to sign in.": "Twitch: sin sesión. Abre openlive (u openlive --login) para entrar.",
     "Which platforms do you watch?": "¿Qué plataformas ves?",
     "You can change this any time with the p key.": "Puedes cambiarlo cuando quieras con la tecla p.",
     "add the channels you watch (no sign-in)": "añade los canales que ves (sin iniciar sesión)",

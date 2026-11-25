@@ -55,10 +55,7 @@ uv venv && uv pip install -e ".[dev]"
 
 ```text
 openlive               open the dashboard (first run: pick platforms, sign in)
-openlive <channel>     watch a Twitch channel right away
 openlive --text        print who is live and exit (also used when piping: openlive | less)
-openlive --login       sign in to Twitch from the terminal, without the dashboard
-openlive --logout      sign out of Twitch and delete the saved token
 openlive --demo        made-up channels
 openlive --lang es     interface language (default: system locale)
 ```
@@ -103,7 +100,7 @@ Files it keeps:
 
 On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OPENLIVE_CONFIG` and `$OPENLIVE_DATA_DIR` override them.
 
-**Not supported:** chat inside the terminal, VODs, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it), `openlive <channel>` for Kick or YouTube. Ads and sub-only streams behave as they do in streamlink.
+**Not supported:** chat inside the terminal, VODs, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
 
 **Privacy:** nothing is sent anywhere but Twitch, Kick and YouTube. No analytics.
 

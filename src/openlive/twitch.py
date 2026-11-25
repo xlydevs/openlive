@@ -113,26 +113,6 @@ def refresh(rec):
     return rec
 
 
-def run_terminal_login(client_id, out=print, open_browser=True):
-    """Sign in without the TUI (for `openlive --login`)."""
-    from .i18n import t
-    d = start_device_login(client_id)
-    url = d["verification_uri"]
-    out(t("Open {url} and enter this code: {code}", url=url, code=d["user_code"]))
-    if open_browser:
-        import webbrowser
-        webbrowser.open(url)
-    deadline = time.time() + int(d.get("expires_in", 1800))
-    while time.time() < deadline:
-        time.sleep(max(1, int(d.get("interval", 5))))
-        tok = poll_device_login(client_id, d["device_code"])
-        if tok:
-            return finish_login(client_id, tok)
-    raise TwitchError(t("The code expired. Try again."))
-
-
-# ───────────────────────── Helix ─────────────────────────
-
 class Client:
     def __init__(self, auth):
         self.auth = auth

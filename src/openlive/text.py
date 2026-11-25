@@ -29,7 +29,7 @@ def run(demo_mode=False, out=print):
     auth = twitch.load_auth()
     if "twitch" in platforms:
         if not auth:
-            problems.append(t("Twitch: not signed in. Run openlive (or openlive --login) to sign in."))
+            problems.append(t("Twitch: not signed in. Open openlive and press l to sign in."))
         else:
             try:
                 rows += [twitch.norm_stream(s) for s in twitch.Client(auth).followed_live()]
