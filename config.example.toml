@@ -6,7 +6,10 @@
 
 # Video player. Default: the first one found of mpv, IINA, VLC.
 # player = "mpv"              # mpv | iina | vlc | or a full path to the executable
-# player_args = "--force-window=immediate --cache=yes"
+# player_args = ""             # extra arguments for the player
+# player_ui = "openlive"      # mpv only. openlive: its own mpv setup (uosc interface, rewind). plain: your mpv config
+# rewind = true               # mpv: open Twitch/Kick/YouTube so you can go back to before you joined
+# rewind_cache_mb = 1024      # mpv: memory kept to go back in what you already watched
 # quality = "best"            # streamlink quality: best, 1080p60, 720p60, 480p, audio_only…
 # low_latency = true
 
@@ -26,3 +29,6 @@
 # https://console.cloud.google.com/apis/library/youtube.googleapis.com and create a key.
 # [youtube]
 # api_key = "your-key"
+# Your own Google client for the sign-in (type "TVs and Limited Input devices", YouTube Data API v3 on)
+# client_id = "…apps.googleusercontent.com"
+# client_secret = "GOCSPX-…"

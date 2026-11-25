@@ -2,7 +2,7 @@
 
 **Who you watch is live right now?** `openlive` is a terminal dashboard of the Twitch, Kick and YouTube channels you watch that are streaming at this moment. Pick one and it plays in your own video player (mpv, IINA or VLC), not in a browser tab.
 
-It runs on your computer and talks only to those sites. Twitch sign-in takes a code, not keys: you open twitch.tv/activate, check the code and press Activate. Kick and YouTube need no account at all.
+It runs on your computer and talks only to those sites. Twitch sign-in takes a code, not keys: you open twitch.tv/activate, check the code and press Activate. YouTube works the same way with Google, to bring your subscriptions. Kick needs no account.
 
 [Español](README.es.md)
 
@@ -11,9 +11,11 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 ## Features
 
 - **Live first, every platform in one list.** The channels you watch that are live, with category, viewers, uptime and title, tagged `TW`, `KI` or `YT`. It refreshes on its own every minute.
-- **Watch without the browser.** `Enter` opens the stream through streamlink in mpv, IINA or VLC. `o` opens the channel in the browser, `c` pops out its chat.
+- **Watch without the browser.** `Enter` opens the stream in mpv, IINA or VLC. `o` opens the channel in the browser, `c` pops out its chat.
+- **Rewind the live stream, even to before you opened it.** With mpv, `←` goes back and `End` returns to live: on Twitch and Kick back to the start of the stream, on YouTube up to an hour when the channel allows it.
 - **Twitch follows, no keys.** Sign in once with a code; your follows come from your account. No developer account, no Client ID, no secret to copy.
-- **Kick and YouTube lists.** Add channels by name or link with `a`, remove them with `x`. Import your YouTube subscriptions from Google Takeout. YouTube shows live streams only, never videos.
+- **YouTube subscriptions with Google.** Sign in once with a code (`g`); openlive only reads your subscriptions. YouTube shows live streams only, never videos.
+- **Kick search as you type.** `a`, type a few letters, pick the channel. Kick doesn't share who you follow, so openlive keeps that list.
 - **Show or hide a platform.** Click its chip in the top bar, or press `t`, `k` or `y`.
 - **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and a search for any Twitch channel or game.
 - **Favourites on top.** `f` pins a channel to the top of every list.
@@ -35,7 +37,7 @@ openlive
 
 On macOS, `brew install mpv` gets you a player.
 
-The first time, openlive asks which platforms you watch. Twitch then asks you to sign in; Kick and YouTube ask for a few channels.
+The first time, openlive asks which platforms you watch. Twitch and YouTube then ask you to sign in with a code; Kick asks for a few channels.
 
 Try it without any account. The demo uses made-up channels and reads and writes nothing:
 
@@ -67,24 +69,36 @@ openlive --lang es     interface language (default: system locale)
 - `a` add Kick / YouTube channels, `x` remove the selected one from your list.
 - `t`, `k`, `y` show or hide Twitch, Kick, YouTube; `p` choose platforms.
 - `/` filter the list (in Search: type a channel or game and press `Enter`), `Esc` clear it.
-- `r` refresh, `l` sign in to Twitch, `Ctrl+P` command palette (sign out is there), `q` quit.
+- `r` refresh, `l` sign in to Twitch, `g` sign in with Google, `Ctrl+P` command palette (sign out is there), `q` quit.
 - Click a column header to sort; click again to reverse.
 
-**YouTube subscriptions:** in [Google Takeout](https://takeout.google.com/takeout/custom/youtube) pick only YouTube → subscriptions, export, unzip, and paste the path of `subscriptions.csv` in the `a` dialog.
+**In the player (mpv):**
+- `←`/`→` 10 seconds back or forward, `Shift+←`/`Shift+→` 5 minutes.
+- `End` (or `l`) back to live. The buttons at the bottom do the same.
+
+**YouTube without signing in:** in [Google Takeout](https://takeout.google.com/takeout/custom/youtube) pick only YouTube → subscriptions, export, unzip, and paste the path of `subscriptions.csv` in the `a` dialog.
 
 ## How it works
 
 Twitch uses its [device code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) and asks for one permission, `user:read:follows`, so it can read who you follow and nothing else. It can't chat, follow or change anything on your account.
 
-Kick and YouTube have no public way for an app like this to read who you follow, so openlive keeps its own list of channels and checks each one.
+Google uses the same kind of code sign-in and asks for `youtube.readonly`: openlive reads your subscriptions and nothing else. To spend almost no API quota, it reads each channel's RSS feed and only asks the API about new videos; videos already known to be finished are remembered.
+
+**Google sign-in while openlive is new:** until Google reviews openlive's app, it only lets in accounts added as testers and shows an "unverified app" warning. Until then you can import your subscriptions from Takeout, add channels by hand, or use your own Google client (`[youtube] client_id` and `client_secret`, a "TVs and Limited Input devices" client).
+
+Kick has no public way for an app like this to read who you follow, so openlive keeps its own list of channels and checks each one.
 
 | Platform | What | Where it comes from |
 |---|---|---|
 | Twitch | Live, Following | Helix `streams/followed`, `channels/followed` |
 | Twitch | Browse, Search | Helix `streams` (top by viewers; `browse_language` filters it), `search/channels` |
 | Kick | live check | `kick.com/api/v2/channels/<slug>` (public, no key) |
-| YouTube | live check | the channel's `/live` page, or with an API key: RSS feed + `videos.list` |
-| All | playback | `streamlink <url> best --player <yours>` |
+| YouTube | subscriptions | `subscriptions?mine=true` (signed in with Google) |
+| YouTube | live check | RSS feed + `videos.list` (signed in or with an API key), otherwise the channel's `/live` page |
+| Twitch | rewind | Helix `videos`: the recording Twitch keeps of the live stream, which grows as it goes on |
+| Kick | rewind | `kick.com/api/v2/channels/<slug>/videos`: its recording of the live stream |
+| YouTube | rewind | yt-dlp: the separate video and audio playlists keep the channel's DVR window (up to ~1 h) |
+| All | playback | mpv with openlive's own setup ([uosc](https://github.com/tomasklaen/uosc) interface and a small rewind script); other players through `streamlink` |
 
 **Honest note:** Kick's channel API and YouTube's `/live` page are not official, documented APIs. They work today and need no keys, but either site can change them and break the check until openlive is updated. With a [YouTube Data API key](https://console.cloud.google.com/apis/library/youtube.googleapis.com) (`[youtube] api_key` in the config, free quota is plenty) YouTube uses the official API instead.
 
@@ -94,15 +108,20 @@ Files it keeps:
 |---|---|
 | `~/.config/openlive/config.toml` | optional settings: platforms, player, quality, language, YouTube key… see [config.example.toml](config.example.toml) |
 | `~/.local/share/openlive/auth.json` | your Twitch sign-in token (only readable by you) |
+| `~/.local/share/openlive/google_auth.json` | your Google sign-in token (only readable by you) |
+| `~/.local/share/openlive/youtube_subs.json`, `youtube_seen.json` | your subscriptions (refreshed every 12 h) and videos known not to be live |
+| `~/.local/share/openlive/mpv/` | openlive's mpv setup; your own `~/.config/mpv` is left alone |
 | `~/.local/share/openlive/channels.json` | your Kick and YouTube channels |
 | `~/.local/share/openlive/favourites.json` | your favourites |
 | `~/.local/share/openlive/cache.json` | last Live list, so the app opens instantly |
 
 On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OPENLIVE_CONFIG` and `$OPENLIVE_DATA_DIR` override them.
 
-**Not supported:** chat inside the terminal, VODs, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
+**Rewinding:** Twitch needs the streamer to keep past broadcasts (most do; sub-only ones can't be opened). YouTube rewinds only on channels with DVR on. Without either, mpv can still go back to the moment you opened the stream. `player_ui = "plain"` uses your own mpv setup instead, without rewind.
 
-**Privacy:** nothing is sent anywhere but Twitch, Kick and YouTube. No analytics.
+**Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
+
+**Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). The first time you play with mpv, openlive downloads uosc once from its GitHub release and checks it against a fixed hash. No analytics.
 
 ## Development
 
