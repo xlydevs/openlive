@@ -12,7 +12,7 @@ from . import __version__, config
 
 ID_URL = "https://id.twitch.tv/oauth2"
 API_URL = "https://api.twitch.tv/helix"
-SCOPES = "user:read:follows"
+SCOPES = "user:read:follows user:write:chat"  # see who you follow; write in chat from the player
 AUTH_FILE = "auth.json"
 UA = f"openlive/{__version__}"
 
