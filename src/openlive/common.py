@@ -49,6 +49,8 @@ def uptime(started_at, now=None):
         return ""
     secs = max(0, int(((now or datetime.now(UTC)) - st).total_seconds()))
     h, m = divmod(secs // 60, 60)
+    if h >= 24:
+        return f"{h // 24}d {h % 24}h"
     return f"{h}h {m:02d}m" if h else f"{m}m"
 
 

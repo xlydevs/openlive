@@ -1,6 +1,6 @@
 import pytest
 
-from openlive import config, i18n, twitch
+from openlive import config, i18n, net, twitch
 
 
 @pytest.fixture(autouse=True)
@@ -17,5 +17,6 @@ def isolated(tmp_path, monkeypatch):
     def no_network(*a, **kw):
         raise AssertionError("tests must not touch the network")
     monkeypatch.setattr(twitch, "_request", no_network)
+    monkeypatch.setattr(net, "fetch", no_network)
     i18n.set_lang("en")
     yield tmp_path

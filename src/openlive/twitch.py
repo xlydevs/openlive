@@ -190,20 +190,20 @@ class Client:
 
 def norm_stream(s):
     """Helix stream → the row dict the UI uses."""
-    return {"login": s.get("user_login", ""), "name": s.get("user_name") or s.get("user_login", ""),
+    return {"platform": "twitch", "login": s.get("user_login", ""), "name": s.get("user_name") or s.get("user_login", ""),
             "game": s.get("game_name", ""), "viewers": int(s.get("viewer_count") or 0), "title": s.get("title", ""),
             "started_at": s.get("started_at", ""), "language": s.get("language", ""), "tags": s.get("tags") or [],
             "live": True}
 
 
 def norm_search(c):
-    return {"login": c.get("broadcaster_login", ""), "name": c.get("display_name") or c.get("broadcaster_login", ""),
+    return {"platform": "twitch", "login": c.get("broadcaster_login", ""), "name": c.get("display_name") or c.get("broadcaster_login", ""),
             "game": c.get("game_name", ""), "viewers": 0, "title": c.get("title", ""),
             "started_at": c.get("started_at", "") if c.get("is_live") else "", "language": c.get("broadcaster_language", ""),
             "tags": c.get("tags") or [], "live": bool(c.get("is_live"))}
 
 
 def norm_followed(c):
-    return {"login": c.get("broadcaster_login", ""), "name": c.get("broadcaster_name") or c.get("broadcaster_login", ""),
+    return {"platform": "twitch", "login": c.get("broadcaster_login", ""), "name": c.get("broadcaster_name") or c.get("broadcaster_login", ""),
             "game": "", "viewers": 0, "title": "", "started_at": "", "language": "", "tags": [], "live": False,
             "followed_at": c.get("followed_at", "")}

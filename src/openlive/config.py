@@ -111,3 +111,41 @@ def favourites():
 
 def save_favourites(names):
     write_json("favourites.json", sorted(names))
+
+
+def youtube_api_key():
+    return os.environ.get("OPENLIVE_YOUTUBE_KEY") or (CONFIG.get("youtube") or {}).get("api_key") or ""
+
+
+def enabled_platforms():
+    """Platforms chosen in the first-run picker ([platforms] enabled), or None if it was never shown."""
+    v = (CONFIG.get("platforms") or {}).get("enabled")
+    return [p for p in v if isinstance(p, str)] if isinstance(v, list) else None
+
+
+def save_platforms(names, path=None):
+    """Write [platforms] enabled = [...] keeping the rest of the file as it is."""
+    CONFIG.setdefault("platforms", {})["enabled"] = list(names)
+    if OFFLINE:
+        return
+    path = path or config_path()
+    line = "enabled = [" + ", ".join(f'"{n}"' for n in names) + "]"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    sec, start, done = None, None, False
+    for i, ln in enumerate(lines):
+        st = ln.strip()
+        if st.startswith("[") and st.endswith("]"):
+            if sec == "platforms" and not done:
+                j = i
+                while j > start + 1 and not lines[j - 1].strip(): j -= 1
+                lines.insert(j, line); done = True; break
+            sec = st.strip("[]").strip()
+            if sec == "platforms": start = i
+        elif sec == "platforms" and st.split("=")[0].strip() == "enabled":
+            lines[i] = line; done = True; break
+    if not done:
+        if start is None:
+            lines += (["", "[platforms]"] if lines else ["[platforms]"])
+        lines.append(line)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
