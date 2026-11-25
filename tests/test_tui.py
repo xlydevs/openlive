@@ -97,3 +97,20 @@ async def test_first_run_picks_platforms_and_adds_kick_channel(monkeypatch, tmp_
         assert channels.load()["kick"] == [{"id": "someone", "name": "SomeOne"}]
         assert [r["login"] for r in app.pane("live").shown] == ["someone"]
     assert 'enabled = ["kick"]' in (tmp_path / "config.toml").read_text()
+
+
+async def test_add_dialog_kick_search(tmp_path):
+    from openlive import channels, onboard
+    from openlive.tui import make_app
+    app = make_app(True)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        await pilot.press("a")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, onboard.AddChannelScreen)
+        await pilot.press(*"ember")
+        await pilot.pause(0.8)
+        assert [r["id"] for r in app.screen.results][:2] == ["emberfox", "emberfox_clips"]
+        await pilot.press("down", "enter")
+        await pilot.pause(0.2)
+        assert channels.load()["kick"] == [{"id": "emberfox_clips", "name": "EmberFoxClips"}]

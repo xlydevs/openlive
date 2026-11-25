@@ -68,3 +68,10 @@ def _off(platform, login, name):
 def search(query):
     q = query.lower()
     return [r for r in data()["following"] if q in r["login"] or q in r["game"].lower()]
+
+
+def kick_search(query):
+    q = query.lower()
+    rows = [(login, name, viewers) for login, name, _g, viewers, _t, _l in _KICK] + [(o, o.capitalize(), 0) for o in _KICK_OFF]
+    rows += [("emberfox_clips", "EmberFoxClips", 0), ("embertalks", "EmberTalks", 0)]
+    return [{"id": lo, "name": na, "followers": 1000 + v * 37, "live": v > 0} for lo, na, v in rows if q in lo][:8]

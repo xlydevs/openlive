@@ -68,3 +68,13 @@ def test_channel_lists_add_remove():
     assert channels.remove(d, "kick", "xqc") and d["kick"] == []
     assert channels.row_key({"platform": "kick", "login": "xqc"}) == "kick:xqc"
     assert channels.row_key({"platform": "twitch", "login": "xqc"}) == "xqc"
+
+
+def test_kick_search_ranks_exact_then_prefix(monkeypatch):
+    def fake(url, **kw):
+        assert "searched_word=Ember" in url
+        mk = lambda slug, f, live=False, banned=False: {"slug": slug, "followers_count": f, "isLive": live, "is_banned": banned, "user": {"username": slug.title()}}
+        return {"channels": [mk("member1", 900, True), mk("embertalks", 10), mk("ember", 5), mk("emberbad", 99999, banned=True)]}
+    monkeypatch.setattr(kick.net, "fetch_json", fake)
+    assert [r["id"] for r in kick.search("Ember")] == ["ember", "embertalks", "member1"]
+    assert kick.search("e") == []

@@ -10,9 +10,11 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Select, SelectionList, Static
+from textual.widgets import Button, Input, OptionList, Select, SelectionList, Static
+from textual.widgets.option_list import Option
 
-from . import channels, config, kick, net, twitch, youtube
+from . import channels, config, demo, kick, net, twitch, youtube
+from .common import human
 from .i18n import t
 
 CSS = """
@@ -30,6 +32,8 @@ LoginScreen, PlatformsScreen, AddChannelScreen { align: center middle; backgroun
 .dialog .label { color: #7c879f; }
 .dialog .hint { color: #4b5570; margin-bottom: 1; }
 #add-status { color: #7c879f; height: auto; }
+#results { height: auto; max-height: 9; background: #0f1420; border: none; margin: -1 0 1 0; display: none; }
+#results > .option-list--option-highlighted { background: #2a3754; }
 .dialog { width: 72; max-width: 95%; height: auto; max-height: 95%; border: round #f2cc8f; background: #141b2a; padding: 1 2; }
 .dialog .title { text-style: bold; color: #eef2fa; }
 .dialog .sub { color: #7c879f; margin-bottom: 1; }
@@ -208,7 +212,10 @@ class PlatformsScreen(ModalScreen):
 
 
 class AddChannelScreen(ModalScreen):
-    """Add Kick/YouTube channels to the user's lists. Dismisses with the number of channels added."""
+    """Add Kick/YouTube channels to the user's lists. Dismisses with the number of channels added.
+
+    Kick: results appear as you type (Enter adds the highlighted one). YouTube: a name or link, or a Takeout file.
+    """
 
     BINDINGS = [("escape", "cancel", "")]
 
@@ -217,14 +224,17 @@ class AddChannelScreen(ModalScreen):
         self.platforms = [p for p in channels.LISTED if p in platforms] or list(channels.LISTED)
         self.platform = platform if platform in self.platforms else self.platforms[0]
         self.added = 0
+        self.results = []
+        self._timer = None
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
             yield Static(t("Add channels"), classes="title")
-            yield Static(t("Kick and YouTube don't share who you follow, so openlive keeps its own list."), classes="sub")
+            yield Static("", classes="sub", id="add-sub")
             yield Select([(channels.LABEL[p], p) for p in self.platforms], value=self.platform, allow_blank=False, id="add-platform")
-            yield Static(t("Channel name or link. Several at once: separate them with commas."), classes="label")
+            yield Static("", classes="label", id="add-label")
             yield Input(placeholder="", id="add-input")
+            yield OptionList(id="results")
             yield Static("", classes="hint", id="add-example")
             yield Static(t("Or import your YouTube subscriptions: path to subscriptions.csv from Google Takeout"), classes="label", id="takeout-label")
             yield Input(placeholder="~/Downloads/Takeout/YouTube and YouTube Music/subscriptions/subscriptions.csv", id="takeout")
@@ -242,15 +252,93 @@ class AddChannelScreen(ModalScreen):
         yt = self.platform == "youtube"
         for sel in ("#takeout-label", "#takeout", "#open-takeout"):
             self.query_one(sel).display = yt
+        self.query_one("#add-sub").update(
+            t("Kick doesn't share who you follow, so openlive keeps its own list.") if not yt
+            else t("Signed in with Google, your subscriptions come on their own. Here you can add others."))
+        self.query_one("#add-label").update(t("Type a channel name: results show up as you type.") if not yt
+                                            else t("Channel name or link. Several at once: separate them with commas."))
         self.query_one("#add-example").update(
-            t("e.g. @LofiGirl, youtube.com/@mkbhd") if yt else t("e.g. xqc, kick.com/trainwreckstv"))
+            t("e.g. @LofiGirl, youtube.com/@mkbhd") if yt else t("↑↓ pick · Enter add · Esc close"))
+        self._show_results([])
 
     def on_select_changed(self, event):
         if event.value in channels.LISTED:
             self.platform = event.value
             self._sync()
 
+    # --- Kick search as you type ---
+    def on_input_changed(self, event):
+        if event.input.id != "add-input" or self.platform != "kick":
+            return
+        if self._timer:
+            self._timer.stop()
+        q = event.value.strip()
+        if len(q) < 2 or "," in q:
+            self._show_results([])
+            return
+        self._timer = self.set_timer(0.35, lambda: self.run_search(q))
+
+    @work(thread=True, exclusive=True, group="search")
+    def run_search(self, q):
+        try:
+            res = demo.kick_search(q) if (config.OFFLINE or getattr(self.app, "demo", False)) else kick.search(q)
+        except Exception:
+            res = []
+        if self.query_one("#add-input", Input).value.strip() == q:
+            self.app.call_from_thread(self._show_results, res)
+
+    def _show_results(self, res, keep=0):
+        self.results = res
+        ol = self.query_one("#results", OptionList)
+        ol.clear_options()
+        have = {c["id"].lower() for c in channels.load().get(self.platform, [])}
+        for r in res:
+            line = Text()
+            line.append("● ", style="#f28b82" if r.get("live") else "#4b5570")
+            line.append(r["name"], style="bold #eef2fa")
+            line.append(f"  {human(r.get('followers', 0))} " + t("followers"), style="#7c879f")
+            if r.get("live"):
+                line.append("  " + t("live"), style="#f28b82")
+            if r["id"].lower() in have:
+                line.append("  ✓ " + t("added"), style="#a5d68f")
+            ol.add_option(Option(line, id=r["id"]))
+        ol.display = bool(res)
+        if res:
+            ol.highlighted = min(keep, len(res) - 1)
+
+    def on_key(self, event):
+        ol = self.query_one("#results", OptionList)
+        if not ol.display or self.focused is not self.query_one("#add-input"):
+            return
+        if event.key in ("down", "up"):
+            n = ol.option_count
+            ol.highlighted = ((ol.highlighted or 0) + (1 if event.key == "down" else -1)) % n
+            event.stop()
+            event.prevent_default()
+
+    def on_option_list_option_selected(self, event):
+        self._add_result(event.option_index)
+
+    def _add_result(self, i):
+        if not (0 <= i < len(self.results)):
+            return
+        r = self.results[i]
+        lists = channels.load()
+        if channels.add(lists, self.platform, {"id": r["id"], "name": r["name"]}):
+            channels.save(lists)
+            self.added += 1
+            self._status(t("Added {n}: {names}", n=1, names=r["name"]))
+        else:
+            self._status(t("{name} is already on your list.", name=r["name"]))
+        self._show_results(self.results, i)
+        self.query_one("#add-input").focus()
+
+    # --- typed names / links, Takeout ---
     def on_input_submitted(self, event):
+        ol = self.query_one("#results", OptionList)
+        if event.input.id == "add-input" and ol.display and ol.highlighted is not None:
+            self._add_result(ol.highlighted)
+            return
         self.action_add()
 
     def on_button_pressed(self, event):
@@ -266,6 +354,10 @@ class AddChannelScreen(ModalScreen):
         w.styles.color = "#f28b82" if error else "#7c879f"
 
     def action_add(self):
+        ol = self.query_one("#results", OptionList)
+        if ol.display and ol.highlighted is not None:
+            self._add_result(ol.highlighted)
+            return
         text = self.query_one("#add-input", Input).value
         path = self.query_one("#takeout", Input).value.strip() if self.platform == "youtube" else ""
         items = [x for x in (s.strip() for s in text.replace("\n", ",").split(",")) if x]
@@ -303,6 +395,7 @@ class AddChannelScreen(ModalScreen):
         self._status(msg, error)
         self.query_one("#add-input", Input).value = ""
         self.query_one("#takeout", Input).value = ""
+        self._show_results([])
         self.query_one("#add-input").focus()
 
     def action_cancel(self):

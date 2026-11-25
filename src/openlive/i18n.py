@@ -152,4 +152,11 @@ ES = {
     "↑↓ move · Enter watch · o open in browser · c chat · f favourite · a add channel · click a header to sort": "↑↓ moverse · Enter ver · o abrir en el navegador · c chat · f favorito · a añadir canal · clic en una cabecera para ordenar",
     "e.g. @LofiGirl, youtube.com/@mkbhd": "p. ej. @LofiGirl, youtube.com/@mkbhd",
     "e.g. xqc, kick.com/trainwreckstv": "p. ej. xqc, kick.com/trainwreckstv",
+    "Kick doesn't share who you follow, so openlive keeps its own list.": "Kick no dice a quién sigues, así que openlive guarda su propia lista.",
+    "Signed in with Google, your subscriptions come on their own. Here you can add others.": "Con la sesión de Google, tus suscripciones salen solas. Aquí puedes añadir otros canales.",
+    "Type a channel name: results show up as you type.": "Escribe el nombre de un canal: los resultados salen mientras escribes.",
+    "↑↓ pick · Enter add · Esc close": "↑↓ elegir · Enter añadir · Esc cerrar",
+    "followers": "seguidores",
+    "added": "añadido",
+    "{name} is already on your list.": "{name} ya está en tu lista.",
 }

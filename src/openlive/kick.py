@@ -67,3 +67,25 @@ def resolve(text):
             raise net.NetError("channel not found", 404) from None
         raise
     return {"id": r["login"], "name": r["name"]}
+
+
+SEARCH = "https://kick.com/api/search?searched_word={q}"
+
+
+def search(query, limit=8):
+    """Channels whose name matches, most followed first: [{'id', 'name', 'followers', 'live'}]."""
+    from urllib.parse import quote
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    d = net.fetch_json(SEARCH.format(q=quote(q)))
+    out = []
+    for c in (d.get("channels") or []) if isinstance(d, dict) else []:
+        slug = c.get("slug")
+        if not slug or c.get("is_banned"):
+            continue
+        out.append({"id": slug, "name": (c.get("user") or {}).get("username") or slug,
+                    "followers": int(c.get("followers_count") or c.get("followersCount") or 0), "live": bool(c.get("isLive"))})
+    ql = q.lower().lstrip("@")
+    out.sort(key=lambda r: (r["id"].lower() != ql, not r["id"].lower().startswith(ql), -r["followers"]))
+    return out[:limit]
