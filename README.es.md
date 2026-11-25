@@ -17,7 +17,9 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 - **Suscripciones de YouTube con Google.** Inicias sesión una vez con un código (`g`); openlive solo lee tus suscripciones. De YouTube solo salen directos, nunca vídeos.
 - **Kick: buscas mientras escribes.** `a`, unas letras y eliges el canal. Kick no dice a quién sigues, así que openlive guarda esa lista.
 - **Muestra u oculta una plataforma.** Haz clic en su etiqueta de la barra superior o pulsa `t`, `k` o `y`.
-- **Siguiendo, Explorar y Buscar.** Todos los que ves (primero los que están en directo), los directos más vistos de Twitch y una búsqueda de cualquier canal o juego de Twitch.
+- **Siguiendo, Explorar y Buscar.** Todos los que ves (primero los que están en directo), los directos más vistos de Twitch y una sola búsqueda en Twitch, Kick y YouTube, con una sección por plataforma.
+- **El chat junto al vídeo.** Una barra lateral con el chat de Twitch en mpv, con emojis y emotes de Twitch. Con la rueda del ratón vuelves atrás (el chat te espera y cuenta los mensajes nuevos), puedes pausarlo y escribes con `Enter`.
+- **Pestaña de Ajustes.** Iniciar y cerrar sesión, tus canales de Kick, rebobinar o solo directo, chat sí o no, reproductor, calidad e idioma (`5`).
 - **Favoritos arriba.** `f` fija un canal arriba en todas las listas.
 - **Ratón y teclado.** Clic en una cabecera para ordenar, `/` para filtrar. Funciona desde 80 columnas.
 - **Inglés y español.**
@@ -63,25 +65,26 @@ openlive --lang en     idioma de la interfaz (por defecto: el del sistema)
 ```
 
 **Teclas:**
-- `1`–`4` cambian de pestaña: En directo, Siguiendo, Explorar, Buscar.
+- `1`–`5` cambian de pestaña: En directo, Siguiendo, Explorar, Buscar, Ajustes.
 - `↑`/`↓` moverse, `Enter` ver (los canales offline se abren en el navegador).
 - `o` abrir en el navegador, `c` chat, `f` favorito.
 - `a` añadir canales de Kick / YouTube, `x` quitar de tu lista el seleccionado.
 - `t`, `k`, `y` muestran u ocultan Twitch, Kick y YouTube; `p` elige las plataformas.
-- `/` filtra la lista (en Buscar: escribe un canal o juego y pulsa `Enter`), `Esc` lo borra.
+- `/` filtra la lista (en Buscar: escribe un canal o juego y pulsa `Enter`; busca en todas las plataformas que usas), `Esc` lo borra.
 - `r` recargar, `l` iniciar sesión en Twitch, `g` iniciar sesión con Google, `Ctrl+P` paleta de comandos (ahí está cerrar sesión), `q` salir.
 - Clic en la cabecera de una columna para ordenar; otro clic invierte el orden.
 
 **En el reproductor (mpv):**
 - `←`/`→` 10 segundos atrás o adelante, `Mayús+←`/`Mayús+→` 5 minutos.
 - `Fin` (o `l`) vuelve al directo, `c` muestra u oculta el chat, `Espacio` pausa.
+- Chat: rueda del ratón o `RePág`/`AvPág` para ver mensajes anteriores, el botón de pausa para pararlo, `Enter` (o **Escribir**) para escribir.
 - Mueve el ratón para ver la barra de controles: clic en la línea de tiempo para saltar, en `● −5:03` para volver al directo.
 
 **YouTube sin iniciar sesión:** en [Google Takeout](https://takeout.google.com/takeout/custom/youtube) marca solo YouTube → suscripciones, exporta, descomprime y pega la ruta de `subscriptions.csv` en el diálogo de `a`.
 
 ## Cómo funciona
 
-Twitch usa su [flujo de código de dispositivo](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) y pide un solo permiso, `user:read:follows`, para leer a quién sigues y nada más. No puede escribir en el chat, seguir canales ni cambiar nada de tu cuenta.
+Twitch usa su [flujo de código de dispositivo](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) y pide dos permisos: `user:read:follows`, para leer a quién sigues, y `user:write:chat`, para enviar lo que escribes en el chat del reproductor. No puede seguir ni dejar de seguir canales ni cambiar nada más de tu cuenta. Si iniciaste sesión antes de que se pudiera escribir, vuelve a iniciarla (`l`) para escribir.
 
 Google usa el mismo tipo de inicio de sesión con código y pide `youtube.readonly`: openlive lee tus suscripciones y nada más. Para gastar casi nada de cuota de la API, lee el feed RSS de cada canal y solo pregunta a la API por los vídeos nuevos; los que ya sabe que han terminado los recuerda.
 
@@ -93,9 +96,12 @@ Kick no ofrece una forma pública de que una app así lea a quién sigues, así 
 |---|---|---|
 | Twitch | En directo, Siguiendo | Helix `streams/followed`, `channels/followed` |
 | Twitch | Explorar, Buscar | Helix `streams` (los más vistos; `browse_language` los filtra), `search/channels` |
+| Kick | buscar | `kick.com/api/search` (pública, sin clave) |
+| YouTube | buscar | yt-dlp sobre la página de búsqueda de YouTube con su filtro "En directo" (sin gastar cuota de la API) |
 | Kick | comprobar directo | `kick.com/api/v2/channels/<slug>` (pública, sin clave) |
 | YouTube | suscripciones | `subscriptions?mine=true` (con la sesión de Google) |
 | YouTube | comprobar directo | feed RSS + `videos.list` (con sesión o clave de API); si no, la página `/live` del canal |
+| Twitch | chat | leído de forma anónima del servidor de chat de Twitch; emotes de `static-cdn.jtvnw.net`; escribir con Helix `chat/messages` |
 | Twitch | rebobinar | Helix `videos`: la grabación que Twitch hace del directo, que crece mientras emite |
 | Kick | rebobinar | `kick.com/api/v2/channels/<slug>/videos`: su grabación del directo |
 | YouTube | rebobinar | yt-dlp: las listas separadas de vídeo y audio guardan la ventana DVR del canal (hasta ~1 h) |
@@ -112,6 +118,7 @@ Ficheros que guarda:
 | `~/.local/share/openlive/google_auth.json` | tu token de Google (solo lo puedes leer tú) |
 | `~/.local/share/openlive/youtube_subs.json`, `youtube_seen.json` | tus suscripciones (se renuevan cada 12 h) y los vídeos que ya sabe que no son directos |
 | `~/.local/share/openlive/mpv/` | la configuración de mpv de openlive; tu `~/.config/mpv` no se toca |
+| `~/.local/share/openlive/emotes/` | las imágenes de emotes de Twitch ya descargadas |
 | `~/.local/share/openlive/channels.json` | tus canales de Kick y YouTube |
 | `~/.local/share/openlive/favourites.json` | tus favoritos |
 | `~/.local/share/openlive/cache.json` | la última lista de directos, para que la app abra al instante |
@@ -120,9 +127,9 @@ En Windows están en `%APPDATA%\openlive` y `%LOCALAPPDATA%\openlive`. `$OPENLIV
 
 **Rebobinar:** en Twitch el streamer tiene que guardar sus directos (casi todos lo hacen; los que son solo para suscriptores no se pueden abrir). En YouTube solo se puede en canales con DVR. Si no, mpv puede volver igualmente hasta el momento en que abriste el directo. `player_ui = "plain"` usa tu propia configuración de mpv, sin rebobinar.
 
-**Chat:** una barra lateral con el chat de Twitch en mpv, solo para leer (`c` la oculta), leído de forma anónima del servidor de chat de Twitch. Todavía no se puede escribir, ni hay chat de Kick y YouTube. Los emojis se quitan porque el motor de texto de mpv no sabe dibujarlos.
+**Chat:** una barra lateral con el chat de Twitch en mpv (`c` la oculta). openlive la dibuja como imagen (con Pillow) porque el motor de texto de mpv no sabe mostrar emojis en color. Guarda los últimos 2000 mensajes. Los emojis compuestos (👩‍💻) muestran solo su primera parte y los emotes de 7TV/BTTV salen como texto. Todavía no hay chat de Kick ni de YouTube. Para escribir hace falta mpv 0.38 o más nuevo.
 
-**No incluye:** chat dentro de la terminal; VODs de directos pasados, clips ni vídeos normales de YouTube; Explorar y Buscar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
+**No incluye:** chat dentro de la terminal; VODs de directos pasados, clips ni vídeos normales de YouTube; Explorar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
 
 **Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick, YouTube y Google (para iniciar sesión). Sin analíticas.
 

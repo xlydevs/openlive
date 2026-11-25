@@ -17,7 +17,9 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 - **YouTube subscriptions with Google.** Sign in once with a code (`g`); openlive only reads your subscriptions. YouTube shows live streams only, never videos.
 - **Kick search as you type.** `a`, type a few letters, pick the channel. Kick doesn't share who you follow, so openlive keeps that list.
 - **Show or hide a platform.** Click its chip in the top bar, or press `t`, `k` or `y`.
-- **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and a search for any Twitch channel or game.
+- **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and one search across Twitch, Kick and YouTube, with a section per platform.
+- **Chat next to the video.** A Twitch chat sidebar in mpv with emoji and Twitch emotes. Scroll back with the mouse wheel (the chat waits for you and counts new messages), pause it, and write with `Enter`.
+- **Settings tab.** Sign in and out, your Kick channels, rewind or live only, chat on or off, player, quality and language (`5`).
 - **Favourites on top.** `f` pins a channel to the top of every list.
 - **Mouse and keyboard.** Click a header to sort, `/` to filter. Works from 80 columns up.
 - **English and Spanish.**
@@ -63,25 +65,26 @@ openlive --lang es     interface language (default: system locale)
 ```
 
 **Keys:**
-- `1`–`4` switch tabs: Live, Following, Browse, Search.
+- `1`–`5` switch tabs: Live, Following, Browse, Search, Settings.
 - `↑`/`↓` move, `Enter` watch (offline channels open in the browser).
 - `o` open in the browser, `c` chat, `f` favourite.
 - `a` add Kick / YouTube channels, `x` remove the selected one from your list.
 - `t`, `k`, `y` show or hide Twitch, Kick, YouTube; `p` choose platforms.
-- `/` filter the list (in Search: type a channel or game and press `Enter`), `Esc` clear it.
+- `/` filter the list (in Search: type a channel or game and press `Enter`; it searches every platform you use), `Esc` clear it.
 - `r` refresh, `l` sign in to Twitch, `g` sign in with Google, `Ctrl+P` command palette (sign out is there), `q` quit.
 - Click a column header to sort; click again to reverse.
 
 **In the player (mpv):**
 - `←`/`→` 10 seconds back or forward, `Shift+←`/`Shift+→` 5 minutes.
 - `End` (or `l`) back to live, `c` show or hide the chat, `Space` pause.
+- Chat: mouse wheel or `PgUp`/`PgDn` to scroll back, the pause button to stop it, `Enter` (or **Write**) to write.
 - Move the mouse for the control bar: click the timeline to jump, `● −5:03` to return to live.
 
 **YouTube without signing in:** in [Google Takeout](https://takeout.google.com/takeout/custom/youtube) pick only YouTube → subscriptions, export, unzip, and paste the path of `subscriptions.csv` in the `a` dialog.
 
 ## How it works
 
-Twitch uses its [device code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) and asks for one permission, `user:read:follows`, so it can read who you follow and nothing else. It can't chat, follow or change anything on your account.
+Twitch uses its [device code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) and asks for two permissions: `user:read:follows`, to read who you follow, and `user:write:chat`, to send what you write in the player's chat. It can't follow, unfollow or change anything else on your account. If you signed in before writing was added, sign in again (`l`) to write.
 
 Google uses the same kind of code sign-in and asks for `youtube.readonly`: openlive reads your subscriptions and nothing else. To spend almost no API quota, it reads each channel's RSS feed and only asks the API about new videos; videos already known to be finished are remembered.
 
@@ -93,9 +96,12 @@ Kick has no public way for an app like this to read who you follow, so openlive 
 |---|---|---|
 | Twitch | Live, Following | Helix `streams/followed`, `channels/followed` |
 | Twitch | Browse, Search | Helix `streams` (top by viewers; `browse_language` filters it), `search/channels` |
+| Kick | search | `kick.com/api/search` (public, no key) |
+| YouTube | search | yt-dlp on YouTube's search page with its "Live" filter (no API quota) |
 | Kick | live check | `kick.com/api/v2/channels/<slug>` (public, no key) |
 | YouTube | subscriptions | `subscriptions?mine=true` (signed in with Google) |
 | YouTube | live check | RSS feed + `videos.list` (signed in or with an API key), otherwise the channel's `/live` page |
+| Twitch | chat | read anonymously from Twitch's chat server; emotes from `static-cdn.jtvnw.net`; writing through Helix `chat/messages` |
 | Twitch | rewind | Helix `videos`: the recording Twitch keeps of the live stream, which grows as it goes on |
 | Kick | rewind | `kick.com/api/v2/channels/<slug>/videos`: its recording of the live stream |
 | YouTube | rewind | yt-dlp: the separate video and audio playlists keep the channel's DVR window (up to ~1 h) |
@@ -112,6 +118,7 @@ Files it keeps:
 | `~/.local/share/openlive/google_auth.json` | your Google sign-in token (only readable by you) |
 | `~/.local/share/openlive/youtube_subs.json`, `youtube_seen.json` | your subscriptions (refreshed every 12 h) and videos known not to be live |
 | `~/.local/share/openlive/mpv/` | openlive's mpv setup; your own `~/.config/mpv` is left alone |
+| `~/.local/share/openlive/emotes/` | Twitch emote images already downloaded |
 | `~/.local/share/openlive/channels.json` | your Kick and YouTube channels |
 | `~/.local/share/openlive/favourites.json` | your favourites |
 | `~/.local/share/openlive/cache.json` | last Live list, so the app opens instantly |
@@ -120,9 +127,9 @@ On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OP
 
 **Rewinding:** Twitch needs the streamer to keep past broadcasts (most do; sub-only ones can't be opened). YouTube rewinds only on channels with DVR on. Without either, mpv can still go back to the moment you opened the stream. `player_ui = "plain"` uses your own mpv setup instead, without rewind.
 
-**Chat:** a read-only Twitch chat sidebar in mpv (`c` hides it), read anonymously from Twitch's chat server. Writing in the chat, and the chat for Kick and YouTube, aren't there yet. Emoji are left out because mpv's text renderer can't draw them.
+**Chat:** a Twitch chat sidebar in mpv (`c` hides it). openlive draws it as an image (with Pillow) because mpv's own text renderer can't show colour emoji. It keeps the last 2000 messages. Joined emoji (👩‍💻) show their first part, and 7TV/BTTV emotes show as text. There's no chat for Kick and YouTube yet. Writing needs mpv 0.38 or newer.
 
-**Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
+**Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
 
 **Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). No analytics.
 
