@@ -165,3 +165,31 @@ async def test_settings_tab_saves_options(tmp_path, monkeypatch):
     text = (tmp_path / "config.toml").read_text()
     assert "rewind = false" in text
     assert ch.load()["kick"] == []
+
+
+async def test_search_groups_platforms_in_sections(monkeypatch):
+    """Without a Twitch sign-in, search still covers Kick and YouTube, each under its own header."""
+    from openlive import youtube
+    monkeypatch.setattr(config, "CONFIG", {"platforms": {"enabled": ["twitch", "kick", "youtube"]}})
+    monkeypatch.setattr(kick, "search", lambda q: [{"id": "lofigirl", "name": "LofiGirl", "followers": 9, "live": True}])
+    row = {"game": "Music", "title": "beats", "started_at": "", "language": "", "tags": []}
+    monkeypatch.setattr(kick, "check", lambda slugs: ([{**row, "platform": "kick", "login": s, "name": s, "live": True, "viewers": 5}
+                                                      for s in slugs], []))
+    yt = [{**row, "platform": "youtube", "login": "@lofi", "name": "Lofi", "live": True, "viewers": v, "video_id": f"v{v}"} for v in (3, 30)]
+    monkeypatch.setattr(youtube, "search", lambda q: yt)
+    from openlive.tui import OpenLive, make_app
+    monkeypatch.setattr(OpenLive, "action_login", lambda self: None)  # no sign-in dialog on start
+    app = make_app()
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause(0.2)
+        app.query_one("TabbedContent").active = "search"
+        app.run_search("lofi")
+        await app.workers.wait_for_complete()
+        await pilot.pause(0.2)
+        p = app.pane("search")
+        heads = [r["_h"] for r in p.shown if "_h" in r]
+        assert heads == ["twitch", "kick", "youtube"]
+        assert "sign in" in p.notes["twitch"]
+        assert [r.get("viewers") for r in p.shown if r.get("platform") == "youtube"] == [30, 3]  # live, most viewers first
+        p.table.move_cursor(row=0)
+        assert p.selected() is None  # a header is not a channel

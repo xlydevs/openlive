@@ -66,8 +66,11 @@ def _off(platform, login, name):
 
 
 def search(query):
+    """Made-up results on every platform, like the real search."""
     q = query.lower()
-    return [r for r in data()["following"] if q in r["login"] or q in r["game"].lower()]
+    d = data()
+    hit = lambda r: q in r["login"].lower() or q in r["name"].lower() or q in r["game"].lower() or q in r["title"].lower()
+    return [r for r in d["following"] + d["kick"] + d["youtube"] if hit(r)]
 
 
 def kick_search(query):

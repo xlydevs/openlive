@@ -192,3 +192,30 @@ def read_takeout(path):
                 continue  # header or junk
             out.append({"id": rec[0].strip(), "name": rec[2].strip(), "channel_id": rec[0].strip()})
     return out
+
+
+LIVE_FILTER = "EgJAAQ%253D%253D"  # YouTube's own "Live" search filter
+
+
+def search(query, limit=15):
+    """Live streams on YouTube matching the query, through yt-dlp (no API quota)."""
+    import urllib.parse
+
+    import yt_dlp
+    q = query.strip()
+    if len(q) < 2:
+        return []
+    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(q)}&sp={LIVE_FILTER}"
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "playlistend": limit, "noprogress": True}
+    with yt_dlp.YoutubeDL(opts) as y:
+        info = y.extract_info(url, download=False) or {}
+    out = []
+    for e in info.get("entries") or []:
+        if not e.get("id") or e.get("live_status") not in (None, "is_live"):
+            continue
+        cid = e.get("channel_id") or ""
+        out.append({"platform": "youtube", "login": e.get("uploader_id") or cid, "name": e.get("channel") or e.get("uploader") or cid,
+                    "channel_id": cid, "video_id": e["id"], "play_url": f"https://www.youtube.com/watch?v={e['id']}",
+                    "live": True, "viewers": int(e.get("concurrent_view_count") or 0), "game": "", "title": e.get("title") or "",
+                    "started_at": "", "language": "", "tags": []})
+    return out

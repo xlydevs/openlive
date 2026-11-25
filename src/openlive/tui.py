@@ -1,5 +1,6 @@
 """Textual TUI."""
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from rich.text import Text
@@ -43,7 +44,7 @@ THEME = Theme(name="openlive", primary=ACCENT, secondary="#c3a6ff", accent=ACCEN
                          "footer-key-foreground": ACCENT, "input-selection-background": "#33415f"})
 
 TABS = ("live", "following", "browse", "search")
-TWITCH_ONLY = ("browse", "search")
+TWITCH_ONLY = ("browse",)
 CACHE = "cache.json"
 SHORT = {"twitch": "TW", "kick": "KI", "youtube": "YT"}
 
@@ -115,9 +116,10 @@ class StreamPane(Vertical):
         self.kind = kind
         self.rows, self.shown = [], []
         self.sort_key, self.sort_rev = (None, False)
+        self.notes = {}  # search: platform → "searching…" / "sign in…" shown in its section header
 
     def compose(self) -> ComposeResult:
-        ph = t("search any channel or game on Twitch, then Enter") if self.kind == "search" else t("filter by channel, game or title")
+        ph = t("search channels and games on Twitch, Kick and YouTube, then Enter") if self.kind == "search" else t("filter by channel, game or title")
         yield Input(placeholder="/ " + ph, classes="filter", id=f"filter-{self.kind}")
         yield Static("", classes="empty", id=f"empty-{self.kind}")
         yield DataTable(id=f"table-{self.kind}", cursor_type="row", zebra_stripes=True)
@@ -158,11 +160,25 @@ class StreamPane(Vertical):
             rows.sort(key=lambda r: (not fav(r), not r["live"], -r["viewers"], r["name"].lower()))
         elif self.kind != "search":
             rows.sort(key=lambda r: (not fav(r), -r["viewers"]))
+        else:
+            rows.sort(key=lambda r: (not r["live"], -r["viewers"]))
+        if self.kind == "search":
+            return self.sections(rows, on)
         return rows
+
+    def sections(self, rows, on):
+        """Search results grouped by platform, each group under a header row."""
+        out = []
+        for p in channels.ALL:
+            group = [r for r in rows if r.get("platform", "twitch") == p]
+            if p in on and (group or p in self.notes):
+                out.append({"_h": p, "n": len(group)})
+                out += group
+        return out
 
     def render_rows(self):
         dt = self.table
-        cur = channels.row_key(self.shown[dt.cursor_row]) if self.shown and 0 <= dt.cursor_row < len(self.shown) else None
+        cur = self._key(self.shown[dt.cursor_row]) if self.shown and 0 <= dt.cursor_row < len(self.shown) else None
         self.shown = self.visible()
         cols = self.columns()
         dt.clear(columns=True)
@@ -171,7 +187,10 @@ class StreamPane(Vertical):
             dt.add_column(label, width=width, key=key)
         favs = self.app.favs
         tw = cols[-1][2]
-        for r in self.shown:
+        for i, r in enumerate(self.shown):
+            if "_h" in r:
+                dt.add_row(*self._header(r, cols), key=str(i))
+                continue
             p = r.get("platform", "twitch")
             cells = []
             for key, _, _ in cols:
@@ -192,26 +211,54 @@ class StreamPane(Vertical):
                     cells.append(Text(uptime(r["started_at"]) if r["live"] else "", style=MUTED, justify="right"))
                 elif key == "title":
                     cells.append(Text(clip(r["title"], tw), style=FG))
-            dt.add_row(*cells, key=channels.row_key(r))
+            dt.add_row(*cells, key=str(i))
         if cur:
             for i, r in enumerate(self.shown):
-                if channels.row_key(r) == cur:
+                if self._key(r) == cur:
                     dt.move_cursor(row=i)
                     break
+        if dt.cursor_row == 0 and len(self.shown) > 1 and "_h" in self.shown[0]:
+            dt.move_cursor(row=1)  # start on the first channel, not on a section header
         empty = self.query_one(".empty")
         empty.display = not self.shown
         empty.update(self.app.empty_message(self.kind, bool(self.rows)))
         self.update_detail()
 
+    @staticmethod
+    def _key(r):
+        if "_h" in r:
+            return "_h:" + r["_h"]
+        return channels.row_key(r) + ("#" + r["video_id"] if r.get("video_id") else "")
+
+    def _header(self, h, cols):
+        p = h["_h"]
+        cells = []
+        for key, _, _ in cols:
+            if key == "plat":
+                cells.append(Text(SHORT[p], style=f"bold {channels.COLOR[p]}"))
+            elif key == "name":
+                cells.append(Text(channels.LABEL[p].upper(), style=f"bold {channels.COLOR[p]}"))
+            elif key == "title":
+                note = self.notes.get(p) or (t("{n} result(s)", n=h["n"]) if h["n"] else t("no results"))
+                cells.append(Text(note, style=MUTED))
+            else:
+                cells.append(Text(""))
+        return cells
+
     def selected(self):
         dt = self.table
-        if self.shown and 0 <= dt.cursor_row < len(self.shown):
+        if self.shown and 0 <= dt.cursor_row < len(self.shown) and "_h" not in self.shown[dt.cursor_row]:
             return self.shown[dt.cursor_row]
         return None
 
     def update_detail(self):
         r = self.selected()
         d = self.query_one(".detail")
+        dt = self.table
+        if not r and self.shown and 0 <= dt.cursor_row < len(self.shown):
+            p = self.shown[dt.cursor_row]["_h"]
+            d.update(Text(t("Results from {platform}. Live channels first.", platform=channels.LABEL[p]), style=DIM))
+            return
         if not r:
             d.update(Text(t("↑↓ move · Enter watch · o open in browser · c chat · f favourite · a add channel · click a header to sort"), style=DIM))
             return
@@ -458,26 +505,56 @@ class OpenLive(App):
 
     @work(thread=True, group="search", exclusive=True)
     def run_search(self, query):
+        """Search every enabled platform at once; each section fills in as its platform answers."""
         if self.demo:
-            self.call_from_thread(self._loaded, "search", demo.search(query))
+            self.call_from_thread(self._search_done, demo.search(query), {})
             return
-        if not self.client:
-            self.call_from_thread(self._warn, t("Search needs a Twitch sign-in"))
-            return
+        jobs = {}
+        if "twitch" in self.platforms and self.client:
+            jobs["twitch"] = self._search_twitch
+        if "kick" in self.platforms:
+            jobs["kick"] = self._search_kick
+        if "youtube" in self.platforms:
+            jobs["youtube"] = youtube.search
+        notes = {p: t("searching…") for p in jobs}
+        if "twitch" in self.platforms and not self.client:
+            notes["twitch"] = t("sign in with Twitch (l) to search it")
+        found = []
+        self.call_from_thread(self._search_done, found, dict(notes))
         self.call_from_thread(self._busy, 1)
         try:
-            found = [twitch.norm_search(c) for c in self.client.search(query)]
-            live = [r["login"] for r in found if r["live"]]
-            if live:  # search results have no viewer counts: ask for them
-                by = {s["user_login"]: twitch.norm_stream(s) for s in self.client.streams_by_login(live)}
-                found = [by.get(r["login"], r) for r in found]
-            self.call_from_thread(self._loaded, "search", found)
-        except twitch.NotSignedIn:
-            self.call_from_thread(self._signed_out)
-        except twitch.TwitchError as e:
-            self.call_from_thread(self._warn, str(e))
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                futs = {ex.submit(fn, query): p for p, fn in jobs.items()}
+                for f in as_completed(futs):
+                    p = futs[f]
+                    notes.pop(p, None)
+                    try:
+                        found = found + f.result()
+                    except twitch.NotSignedIn:
+                        notes["twitch"] = t("sign in with Twitch (l) to search it")
+                    except Exception as e:  # noqa: BLE001 — one platform failing must not hide the others
+                        notes[p] = "⚠ " + clip(str(e) or type(e).__name__, 60)
+                    self.call_from_thread(self._search_done, found, dict(notes))
         finally:
             self.call_from_thread(self._busy, -1)
+
+    def _search_twitch(self, query):
+        found = [twitch.norm_search(c) for c in self.client.search(query)]
+        live = [r["login"] for r in found if r["live"]]
+        if live:  # search results have no viewer counts: ask for them
+            by = {s["user_login"]: twitch.norm_stream(s) for s in self.client.streams_by_login(live)}
+            found = [by.get(r["login"], r) for r in found]
+        return found
+
+    @staticmethod
+    def _search_kick(query):
+        hits = kick.search(query)
+        rows, _ = kick.check([h["id"] for h in hits]) if hits else ([], [])
+        return rows
+
+    def _search_done(self, rows, notes):
+        self.pane("search").notes = notes
+        self._loaded("search", rows)
 
     def _busy(self, d):
         self.busy = max(0, self.busy + d)
@@ -572,7 +649,7 @@ class OpenLive(App):
         return {"live": t("Nobody you follow is live right now. Browse (3) shows the top streams on Twitch."),
                 "following": t("No channels yet. Follow some on Twitch, or press a to add Kick / YouTube channels."),
                 "browse": t("No streams found."),
-                "search": t("Type a channel or game above and press Enter.")}[kind]
+                "search": t("Type a channel or game above and press Enter. It searches every platform you use.")}[kind]
 
     # ── actions ──
     def on_tabbed_content_tab_activated(self, event):
