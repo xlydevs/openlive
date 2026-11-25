@@ -38,7 +38,7 @@ def test_twitch_plays_the_growing_recording_in_mpv(monkeypatch, tmp_path):
     session = json.loads(open(cmd[2].split("=", 2)[2]).read())
     assert session["mode"] == "vod" and session["chat"] == "a" and session["channel"] == "A" and session["text"]["live"]
     ipc = next(c for c in cmd if c.startswith("--input-ipc-server=")).split("=", 1)[1]
-    assert bridge[-3:] == ["openlive.chat", ipc, "a"]
+    assert bridge[-4:] == ["openlive.chat", ipc, "a", "42"]
 
 
 def test_no_recording_falls_back_to_streamlink_with_openlive_mpv(monkeypatch, tmp_path):
@@ -81,6 +81,27 @@ def test_plain_ui_keeps_streamlink(monkeypatch, tmp_path):
 def test_chat_parses_twitch_messages():
     from openlive import chat
     line = r"@badge-info=;color=#1E90FF;display-name=Some\sOne;emotes= :someone!someone@someone.tmi.twitch.tv PRIVMSG #chan :hola :) que tal"
-    assert chat.parse(line) == {"n": "Some One", "c": "#1E90FF", "t": "hola :) que tal"}
-    assert chat.parse(":x!x@x PRIVMSG #chan :\x01ACTION waves\x01")["t"] == "waves"
+    assert chat.parse(line) == {"n": "Some One", "c": "#1E90FF", "t": "hola :) que tal", "e": ""}
+    assert chat.parse(":x!x@x PRIVMSG #chan :\x01ACTION waves\x01") == {"n": "x", "c": "", "t": "waves", "e": "", "me": True}
     assert chat.parse(":tmi.twitch.tv 001 justinfan1 :Welcome") is None
+
+
+def test_chat_sender_posts_to_helix_and_explains_missing_permission(monkeypatch):
+    from openlive import chat, twitch
+    rec = {"client_id": "c", "access_token": "tok", "user_id": "7", "login": "me", "expires_at": 0}
+    monkeypatch.setattr(twitch, "load_auth", lambda: dict(rec))
+    calls = []
+
+    def helix(method, path, headers, body=None):
+        calls.append((method, path, headers["Authorization"], body))
+        if path.startswith("users"):
+            return {"data": [{"id": "99"}]}
+        return {"data": [{"is_sent": True}]}
+    monkeypatch.setattr(chat, "_helix", helix)
+    s = chat.Sender("somechan")
+    assert s.send("hola") is None
+    assert calls[-1] == ("POST", "chat/messages", "Bearer tok", {"broadcaster_id": "99", "sender_id": "7", "message": "hola"})
+    monkeypatch.setattr(twitch, "validate", lambda tok: {"scopes": ["user:read:follows"]})
+    assert chat.Sender("x", "1").ready() == "rescope"  # signed in before writing was possible
+    monkeypatch.setattr(twitch, "load_auth", lambda: None)
+    assert chat.Sender("x", "1").ready() == "signin"

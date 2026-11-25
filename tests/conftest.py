@@ -1,6 +1,6 @@
 import pytest
 
-from openlive import config, google, i18n, net, player, twitch, youtube
+from openlive import chat, config, google, i18n, net, player, twitch, youtube
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +20,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(google, "_request", no_network)
     monkeypatch.setattr(net, "fetch", no_network)
     monkeypatch.setattr(youtube, "search", no_network)  # yt-dlp, not net.fetch
+    monkeypatch.setattr(chat, "_helix", no_network)
     for name in ("_direct_url", "_youtube_hls"):
         monkeypatch.setattr(player, name, no_network)
     i18n.set_lang("en")

@@ -209,7 +209,11 @@ def session_for(r, client=None, quality="best"):
 def _session_file(d, sess):
     sess["text"] = {"live": t("LIVE"), "rewind": t("Going back…"), "no_more": t("This stream can't go back further."),
                     "chat": t("Chat"), "hide": t("hide"), "chat_connecting": t("Connecting to the chat…"),
-                    "chat_quiet": t("Nobody has written yet."), "chat_offline": t("Can't reach the chat, retrying…")}
+                    "chat_quiet": t("Nobody has written yet."), "chat_offline": t("Can't reach the chat, retrying…"),
+                    "write": t("Write"), "say": t("Say"), "paused": t("Chat paused"), "new_msgs": t("{n} new messages"),
+                    "chat_signin": t("To write, sign in to Twitch in openlive (press l there)."),
+                    "chat_rescope": t("To write, sign in to Twitch again in openlive (press l there)."),
+                    "chat_not_sent": t("Not sent: {why}"), "chat_no_input": t("Writing needs mpv 0.38 or newer.")}
     path = d / f"session-{os.getpid()}-{time.time_ns()}.json"
     path.write_text(json.dumps(sess))
     return path
@@ -223,7 +227,8 @@ def _ipc_path(d):
 def _with_ui(sess, target, title):
     """Add what the interface shows: channel, title, and the Twitch chat (only Twitch for now)."""
     sess.update(channel=target.get("name", ""), title=title or "", chat_on=bool(config.get("chat", True)),
-                chat=target.get("login", "") if target.get("platform", "twitch") == "twitch" else "")
+                chat=target.get("login", "") if target.get("platform", "twitch") == "twitch" else "",
+                chat_id=target.get("user_id", ""))
     return sess
 
 
@@ -259,7 +264,7 @@ def command_for(target, title="", client=None):
     sess = _with_ui(sess or {"platform": target.get("platform", "twitch"), "mode": "pipe"}, target, title)
     d = prepare_mpv()
     ipc = _ipc_path(d) if sess["chat"] else None
-    bridge = [sys.executable, "-m", "openlive.chat", ipc, sess["chat"]] if ipc else None
+    bridge = [sys.executable, "-m", "openlive.chat", ipc, sess["chat"], sess.get("chat_id") or ""] if ipc else None
     if sess["mode"] != "pipe":
         return mpv_command(ppath, sess, full, ipc), bridge
     extra = f'"--config-dir={d}" "--script-opts=openlive-session={_session_file(d, sess)}"'

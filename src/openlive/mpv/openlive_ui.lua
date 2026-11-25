@@ -1,20 +1,16 @@
 -- openlive's interface for mpv: a slim control bar and a chat sidebar, in openlive's colours.
 -- The rewind logic lives in openlive.lua, which shares the session in user-data/openlive.
--- Chat messages arrive as "script-message openlive-chat <json>" from openlive's chat bridge.
+-- The chat sidebar itself is drawn by openlive's chat bridge (chat.py), which shows it with overlay-add.
 local mp = require "mp"
-local utils = require "mp.utils"
 
 -- palette (same as the TUI)
 local function c(hex) return hex:sub(6, 7) .. hex:sub(4, 5) .. hex:sub(2, 3) end
 local BG, SURF, BORDER = c("#0f1420"), c("#141b2a"), c("#263044")
 local FG, BRIGHT, MUTED, DIM = c("#d6deeb"), c("#eef2fa"), c("#7c879f"), c("#4b5570")
 local ACCENT, LIVE = c("#f2cc8f"), c("#f28b82")
-local NAME_COLORS = { "#9cc8e8", "#a5d68f", "#c3a6ff", "#f4a98a", "#63d3c4", "#e8d36a", "#ff9fb2", "#7fb2ff" }
 local CHAT_RATIO = 0.27
 
 local S = { text = {} }            -- session from openlive.lua
-local msgs = {}                    -- chat messages {n, c, t} or {sys}
-local chat_status = nil            -- "joined" / "offline"
 local chat_on = false
 local last_move, hover_bar = 0, false
 local hits = {}
@@ -52,30 +48,6 @@ local function chars(s)
     return out
 end
 
-local function wrap(s, cols)
-    local lines, line, width, word, wwidth = {}, "", 0, "", 0
-    local function push_word()
-        if word == "" then return end
-        if width + wwidth > cols and width > 0 then
-            lines[#lines + 1] = line
-            line, width = (word:gsub("^ ", "")), wwidth
-        else
-            line, width = line .. word, width + wwidth
-        end
-        word, wwidth = "", 0
-    end
-    for _, cw in ipairs(chars(s)) do
-        if cw[1] == " " then push_word() end
-        word, wwidth = word .. cw[1], wwidth + cw[2]
-        if wwidth > cols then  -- a very long word: cut it
-            push_word()
-        end
-    end
-    push_word()
-    lines[#lines + 1] = line
-    return lines
-end
-
 local function rect(x1, y1, x2, y2, color, alpha)
     return string.format("{\\an7\\pos(0,0)\\bord0\\shad0\\1c&H%s&\\1a&H%s&\\p1}m %d %d l %d %d l %d %d l %d %d{\\p0}",
         color, alpha or "00", x1, y1, x2, y1, x2, y2, x1, y2)
@@ -85,18 +57,20 @@ local function text(x, y, an, size, color, s, extra)
     return string.format("{\\an%d\\pos(%d,%d)\\fs%d\\bord0\\shad0\\1c&H%s&%s}%s", an, x, y, size, color, extra or "", s)
 end
 
-local function name_color(m)
-    if m.c and m.c:match("^#%x%x%x%x%x%x$") then
-        -- very dark name colours are unreadable on the panel: fall back to the palette
-        local r, g, b = tonumber(m.c:sub(2, 3), 16), tonumber(m.c:sub(4, 5), 16), tonumber(m.c:sub(6, 7), 16)
-        if r * 0.3 + g * 0.59 + b * 0.11 > 70 then return c(m.c) end
-    end
-    local h = 0
-    for i = 1, #(m.n or "") do h = (h * 31 + m.n:byte(i)) % 1000003 end
-    return c(NAME_COLORS[h % #NAME_COLORS + 1])
+-- ───────────────────────── chat sidebar ─────────────────────────
+-- openlive's chat bridge draws the sidebar itself (as an image, so it can show emoji and emotes) and puts it
+-- on screen with overlay-add. This script makes room for it, forwards clicks and the mouse wheel over it, and
+-- asks for the text when you write.
+
+local function chat_x()
+    local w = mp.get_osd_size()
+    return w and (w - math.floor(w * CHAT_RATIO)) or nil
 end
 
--- ───────────────────────── chat sidebar ─────────────────────────
+local function over_chat(m)
+    local x0 = chat_x()
+    return chat_on and m and x0 and m.x >= x0
+end
 
 local function render_chat()
     local w, h = mp.get_osd_size()
@@ -105,60 +79,39 @@ local function render_chat()
         chat:update()
         return
     end
+    -- plain panel shown until the bridge's first image covers it
     chat.res_x, chat.res_y = w, h
-    local u = h / 720
-    local fs = math.floor(math.max(14, 17 * u))
-    local pad = math.floor(12 * u)
-    local x0 = w - math.floor(w * CHAT_RATIO)
-    local ev = {}
-    ev[#ev + 1] = rect(x0, 0, w, h, SURF)
-    ev[#ev + 1] = rect(x0, 0, x0 + math.max(1, math.floor(u)), h, BORDER)
-    local head = math.floor(fs * 2.6)
-    ev[#ev + 1] = rect(x0, head - math.max(1, math.floor(u)), w, head, BORDER)
-    ev[#ev + 1] = text(x0 + pad, head / 2, 4, fs, MUTED, esc(tr("chat", "Chat")) .. "  {\\1c&H" .. FG .. "&}" .. esc(S.channel), "\\b1")
-    ev[#ev + 1] = text(w - pad, head / 2, 6, math.floor(fs * 0.85), DIM, "c " .. esc(tr("hide", "hide")))
-    local cols = math.max(10, math.floor((w - x0 - 2 * pad) / (fs * 0.47)))
-    local lh = math.floor(fs * 1.3)
-    local y = h - pad
-    if #msgs == 0 then
-        local status = chat_status == "offline" and tr("chat_offline", "Can't reach the chat, retrying…")
-            or chat_status == "joined" and tr("chat_quiet", "Nobody has written yet.")
-            or tr("chat_connecting", "Connecting to the chat…")
-        ev[#ev + 1] = text(x0 + pad, head + pad, 7, fs, DIM, esc(status))
-    end
-    for i = #msgs, 1, -1 do
-        local m = msgs[i]
-        local lines = wrap((m.n or "") .. ": " .. clean(m.t), cols)
-        y = y - #lines * lh
-        if y < head + pad / 2 then break end
-        local first = lines[1]
-        local name = m.n or ""
-        local body = first:sub(#name + 1)
-        local out = "{\\1c&H" .. name_color(m) .. "&\\b1}" .. esc(name) .. "{\\b0\\1c&H" .. FG .. "&}" .. esc(body)
-        for j = 2, #lines do out = out .. "\\N" .. esc(lines[j]) end
-        ev[#ev + 1] = string.format("{\\an7\\pos(%d,%d)\\fs%d\\bord0\\shad0\\q2}", x0 + pad, y, fs) .. out
-        y = y - math.floor(lh * 0.25)
-    end
-    chat.data = table.concat(ev, "\n")
+    local x0 = chat_x()
+    chat.data = rect(x0, 0, w, h, SURF) .. "\n" .. rect(x0, 0, x0 + math.max(1, math.floor(h / 720)), h, BORDER)
     chat:update()
 end
 
 local function set_chat(on)
     chat_on = on and S.chat ~= ""
     mp.set_property_number("video-margin-ratio-right", chat_on and CHAT_RATIO or 0)
+    mp.set_property_native("user-data/openlive-ui", { chat = chat_on })
     render_chat()
 end
 
-mp.register_script_message("openlive-chat", function(json)
-    local m = utils.parse_json(json)
-    if not m then return end
-    if m.sys then
-        chat_status = m.sys
-    else
-        msgs[#msgs + 1] = m
-        if #msgs > 150 then table.remove(msgs, 1) end
+local function to_bridge(...)
+    mp.commandv("script-message", "openlive-chat-ui", ...)
+end
+
+mp.register_script_message("openlive-chat-hide", function() set_chat(false) end)
+
+local ok_input, input = pcall(require, "mp.input")
+mp.register_script_message("openlive-chat-prompt", function()
+    if not ok_input then
+        mp.osd_message(tr("chat_no_input", "Writing needs mpv 0.38 or newer."), 3)
+        return
     end
-    if chat_on then render_chat() end
+    input.get({
+        prompt = tr("say", "Say") .. " › ",
+        submit = function(line)
+            if line and line:match("%S") then to_bridge("send", line) end
+            input.terminate()
+        end,
+    })
 end)
 
 -- ───────────────────────── control bar ─────────────────────────
@@ -278,8 +231,12 @@ mp.observe_property("mouse-pos", "native", function(_, m)
 end)
 
 mp.add_forced_key_binding("MBTN_LEFT", "click", function(e)
-    if e.event ~= "down" then return end
+    if e.event ~= "down" and e.event ~= "press" then return end
     local m = mp.get_property_native("mouse-pos")
+    if over_chat(m) then
+        to_bridge("click", tostring(m.x), tostring(m.y))
+        return
+    end
     local hb = m and visible() and hit_test(m.x, m.y)
     if hb then
         hb[5](m.x)
@@ -289,6 +246,17 @@ mp.add_forced_key_binding("MBTN_LEFT", "click", function(e)
 end, { complex = true })
 
 mp.add_forced_key_binding("c", "toggle-chat", function() set_chat(not chat_on) end)
+mp.add_forced_key_binding("WHEEL_UP", "wheel-up", function()
+    if over_chat(mp.get_property_native("mouse-pos")) then to_bridge("scroll", "3")
+    else mp.command("script-binding openlive/forward") end
+end)
+mp.add_forced_key_binding("WHEEL_DOWN", "wheel-down", function()
+    if over_chat(mp.get_property_native("mouse-pos")) then to_bridge("scroll", "-3")
+    else mp.command("script-binding openlive/back") end
+end)
+mp.add_forced_key_binding("ENTER", "chat-write", function() if chat_on then to_bridge("write") end end)
+mp.add_forced_key_binding("PGUP", "chat-up", function() if chat_on then to_bridge("scroll", "10") end end)
+mp.add_forced_key_binding("PGDWN", "chat-down", function() if chat_on then to_bridge("scroll", "-10") end end)
 
 mp.observe_property("user-data/openlive", "native", function(_, v)
     if type(v) ~= "table" then return end
