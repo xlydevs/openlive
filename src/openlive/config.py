@@ -16,7 +16,7 @@ WIN = sys.platform == "win32"
 
 # Client ID of the openlive app registered on dev.twitch.tv (type "Public": it has no secret,
 # so it is fine to ship). Users can bring their own with `client_id` in the config or $OPENLIVE_CLIENT_ID.
-DEFAULT_CLIENT_ID = ""
+DEFAULT_CLIENT_ID = "1rld97h4g34kqyaqbe1ika9i13mndl"
 
 
 def _xdg(var, fallback):
