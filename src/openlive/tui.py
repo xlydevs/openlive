@@ -622,7 +622,7 @@ class OpenLive(App):
         if self.demo:
             self.notify(t("Demo mode: would open {name} in your player.", name=r["name"]), timeout=3)
             return
-        self.notify(t("Opening {name}…", name=r["name"]), timeout=3)
+        self.notify(t("Opening {name}… the player takes a few seconds to appear.", name=r["name"]), timeout=6)
         self.open_player(r)
 
     @work(thread=True, group="player")

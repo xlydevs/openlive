@@ -104,7 +104,7 @@ ES = {
     "Enter opens the channel on Twitch.": "Enter abre el canal en Twitch.",
     "Demo mode: nothing to refresh.": "Modo demo: no hay nada que recargar.",
     "Demo mode: would open {name} in your player.": "Modo demo: aquí se abriría {name} en tu reproductor.",
-    "Opening {name}…": "Abriendo {name}…",
+    "Opening {name}… the player takes a few seconds to appear.": "Abriendo {name}… el reproductor tarda unos segundos en aparecer.",
     "streamlink isn't installed. Reinstall openlive or run: pipx install streamlink": "streamlink no está instalado. Reinstala openlive o ejecuta: pipx install streamlink",
     "No video player found. Install mpv (https://mpv.io), IINA or VLC, or set player in the config.": "No se encontró ningún reproductor. Instala mpv (https://mpv.io), IINA o VLC, o configura player en el fichero de configuración.",
     # platforms
