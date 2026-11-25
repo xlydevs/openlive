@@ -64,7 +64,7 @@ DataTable > .datatable--header { background: #141b2a; color: #7c879f; text-style
 DataTable > .datatable--even-row { background: #121826; }
 DataTable > .datatable--odd-row { background: #0f1420; }
 DataTable > .datatable--header-hover { background: #222c42; }
-.detail { height: 2; color: #d6deeb; padding: 0 1; background: #141b2a; }
+.detail { height: 2; color: #d6deeb; padding: 0 1; background: #141b2a; text-wrap: nowrap; text-overflow: ellipsis; }
 .empty { height: auto; color: #7c879f; padding: 1 1; display: none; }
 .-narrow #brand, .-narrow #status { display: none; }
 """ + onboard.CSS
