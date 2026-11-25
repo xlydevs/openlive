@@ -11,7 +11,7 @@ from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
-from . import channels, config, demo, google, kick, onboard, player, twitch, youtube
+from . import channels, config, demo, google, kick, onboard, player, settings, twitch, youtube
 from .common import (
     ACCENT,
     BG,
@@ -72,7 +72,7 @@ DataTable > .datatable--header-hover { background: #222c42; }
 .detail { height: 2; color: #d6deeb; padding: 0 1; background: #141b2a; text-wrap: nowrap; text-overflow: ellipsis; }
 .empty { height: auto; color: #7c879f; padding: 1 1; display: none; }
 .-narrow #brand, .-narrow #status, .-narrow #who { display: none; }
-""" + onboard.CSS
+""" + onboard.CSS + settings.CSS
 
 
 class Commands(Provider):
@@ -283,7 +283,7 @@ class OpenLive(App):
         Binding("g", "google_login", "Google", show=False),
         Binding("escape", "unfocus", "", show=False),
         *[Binding(channels.KEY[p], f"toggle('{p}')", "", show=False) for p in channels.ALL],
-        *[Binding(str(i + 1), f"tab('{k}')", "", show=False) for i, k in enumerate(TABS)],
+        *[Binding(str(i + 1), f"tab('{k}')", "", show=False) for i, k in enumerate((*TABS, "settings"))],
     ]
 
     def __init__(self, demo_mode=False):
@@ -316,6 +316,8 @@ class OpenLive(App):
                     pane = StreamPane(k, classes="box", id=f"pane-{k}")
                     pane.border_title = (label + (" · Twitch" if k in TWITCH_ONLY else "")).upper()
                     yield pane
+            with TabPane(t("Settings"), id="settings"):
+                yield settings.SettingsPane(id="settings-pane")
         yield Footer()
 
     def pane(self, kind) -> StreamPane:
@@ -515,7 +517,8 @@ class OpenLive(App):
             self.load_twitch("browse")
 
     def repaint_uptimes(self):
-        self.pane(self.current).render_rows()
+        if self.current in TABS:
+            self.pane(self.current).render_rows()
 
     # ── top bar ──
     def update_bar(self):
@@ -548,6 +551,8 @@ class OpenLive(App):
         elif self.last_ok:
             st.append(f"✓ {self.last_ok:%H:%M}", style=OK_C)
         self.query_one("#status").update(st)
+        if self.current == "settings":
+            self.query_one(settings.SettingsPane).sync()
 
     def empty_message(self, kind, has_rows):
         if has_rows:
@@ -572,6 +577,11 @@ class OpenLive(App):
     # ── actions ──
     def on_tabbed_content_tab_activated(self, event):
         kind = event.pane.id
+        if kind not in TABS:  # focus must move too, or Textual switches back to the tab holding it
+            sp = self.query_one(settings.SettingsPane)
+            sp.sync()
+            sp.query_one("#twitch-btn").focus()
+            return
         if kind == "following" and self.client and "twitch" in self.platforms and self.src["twitch_follow"] is None:
             self.load_twitch("following")
         elif kind == "browse" and "browse" not in self.loaded and self.client:
@@ -600,9 +610,12 @@ class OpenLive(App):
             self.load_twitch("browse")
 
     def action_filter(self):
-        self.pane(self.current).query_one(Input).focus()
+        if self.current in TABS:
+            self.pane(self.current).query_one(Input).focus()
 
     def action_unfocus(self):
+        if self.current not in TABS:
+            return
         p = self.pane(self.current)
         inp = p.query_one(Input)
         if self.focused is inp and inp.value and self.current != "search":
@@ -610,7 +623,7 @@ class OpenLive(App):
         p.table.focus()
 
     def selected(self):
-        return self.pane(self.current).selected()
+        return self.pane(self.current).selected() if self.current in TABS else None
 
     def action_watch(self):
         if isinstance(self.focused, Input): return
@@ -652,19 +665,21 @@ class OpenLive(App):
         for k in TABS:
             self.pane(k).render_rows()
 
-    def action_add(self):
+    def action_add(self, platform=None):
         if isinstance(self.screen, onboard.AddChannelScreen): return
         r = self.selected()
+        platform = platform or (r.get("platform") if r else None)
         plats = [p for p in (self.platforms if not self.demo else channels.ALL)
                  if p in channels.LISTED and not (p == "youtube" and self.gauth)]  # signed in: YouTube comes from Google
         if not plats:
             self.notify(t("Your YouTube channels come from your Google subscriptions."))
             return
-        self.push_screen(onboard.AddChannelScreen(plats, r.get("platform") if r else None), self._after_add)
+        self.push_screen(onboard.AddChannelScreen(plats, platform), self._after_add)
 
     def _after_add(self, added):
         if added and not self.demo:
             self.load_live()
+        self.query_one(settings.SettingsPane).sync()
 
     def action_remove(self):
         r = self.selected()
@@ -672,15 +687,24 @@ class OpenLive(App):
         if self.demo:
             self.notify(t("Demo mode: nothing to remove."), timeout=2)
             return
-        lists = channels.load()
-        if channels.remove(lists, r["platform"], r["login"]):
-            channels.save(lists)
-            self.src[r["platform"]] = [x for x in self.src[r["platform"]] if x["login"] != r["login"]]
-            self.rebuild()
-            self.update_bar()
-            self.notify(t("Removed {name} from your {platform} list.", name=r["name"], platform=channels.LABEL[r["platform"]]), timeout=3)
+        if self.remove_channel(r["platform"], r["login"], r["name"]):
+            pass
         elif r["platform"] == "youtube" and self.gauth:
             self.notify(t("That channel comes from your YouTube subscriptions."), timeout=3)
+
+    def remove_channel(self, platform, cid, name=None):
+        if self.demo:
+            return False
+        lists = channels.load()
+        if not channels.remove(lists, platform, cid):
+            return False
+        channels.save(lists)
+        self.src[platform] = [x for x in self.src[platform] if x["login"] != cid]
+        self.rebuild()
+        self.update_bar()
+        self.query_one(settings.SettingsPane).sync()
+        self.notify(t("Removed {name} from your {platform} list.", name=name or cid, platform=channels.LABEL[platform]), timeout=3)
+        return True
 
     def action_platforms(self, first_run=False):
         if self.demo or isinstance(self.screen, onboard.PlatformsScreen): return

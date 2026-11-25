@@ -142,3 +142,26 @@ async def test_add_dialog_hides_youtube_when_signed_in_to_google():
         await pilot.pause(0.2)
         assert isinstance(app.screen, onboard.AddChannelScreen)
         assert app.screen.platforms == ["kick"] and not app.screen.query_one("#add-platform").display
+
+
+async def test_settings_tab_saves_options(tmp_path, monkeypatch):
+    from openlive import config, settings
+    from openlive.tui import make_app
+    monkeypatch.setattr(config, "CONFIG", {"platforms": {"enabled": ["kick"]}})
+    from openlive import channels as ch
+    ch.save({"kick": [{"id": "emberfox", "name": "EmberFox"}], "youtube": []})
+    monkeypatch.setattr(kick, "check", lambda slugs: ([], []))
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        await pilot.press("5")
+        await pilot.pause(0.2)
+        assert app.current == "settings"
+        pane = app.query_one(settings.SettingsPane)
+        pane.query_one("#set-rewind").value = False
+        await pilot.pause(0.1)
+        await pilot.click("#kick-remove")
+        await pilot.pause(0.2)
+    text = (tmp_path / "config.toml").read_text()
+    assert "rewind = false" in text
+    assert ch.load()["kick"] == []
