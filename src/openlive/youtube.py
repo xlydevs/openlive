@@ -1,8 +1,8 @@
 """YouTube: live streams (only live, never videos) of the channels in the user's list.
 
-Reading subscriptions needs a Google-verified app, so the list is the user's own (typed in, or imported from
-Google Takeout). Without a key, openlive reads each channel's public /live page. With an optional YouTube Data
-API key it uses the channels' RSS feeds plus one cheap videos.list call instead.
+Channels come from your Google sign-in (subscriptions, see google.py) and/or your own list (typed in, or imported
+from Google Takeout). Signed in, or with an optional API key, openlive reads the channels' RSS feeds plus one cheap
+videos.list call. Otherwise it reads each channel's public /live page (unofficial).
 """
 import csv
 import html
@@ -88,42 +88,83 @@ def check_pages(chans):
     return rows, errors
 
 
-def check_api(chans, key):
-    """RSS feed per channel (no quota) → recent video ids → one videos.list call per 50 ids (1 unit each)."""
+SEEN_FILE = "youtube_seen.json"
+
+
+def check_feeds(chans, lookup):
+    """RSS feed per channel (no quota) → recent video ids → lookup(ids) = videos.list items (1 unit per 50 ids).
+
+    Videos already known not to be live (finished streams, uploads) are remembered and never asked about again,
+    so after the first run a refresh costs about one quota unit.
+    """
     rows, errors, owner = {}, [], {}
-    with_id = [c for c in chans if c.get("channel_id")]
+    seen = set(config.read_json(SEEN_FILE, []) or [])
     for c in chans:
         rows[c["id"]] = _offline(c)
-    for c, res in net.parallel(lambda c: net.fetch(f"{WEB}/feeds/videos.xml?channel_id={c['channel_id']}")[0], with_id):
+    for c, res in net.parallel(lambda c: net.fetch(f"{WEB}/feeds/videos.xml?channel_id={c['channel_id']}")[0], chans):
         if isinstance(res, Exception):
             errors.append(f"youtube/{c['id']}: {res}")
             continue
-        for vid in re.findall(r"<yt:videoId>([^<]+)</yt:videoId>", res)[:5]:
-            owner[vid] = c["id"]
-    ids = list(owner)
-    for i in range(0, len(ids), 50):
-        q = f"{API}?part=snippet,liveStreamingDetails&id={','.join(ids[i:i + 50])}&key={key}"
-        try:
-            data = net.fetch_json(q)
-        except net.NetError as e:
-            errors.append(f"youtube API: {e}")
-            break
-        for v in data.get("items", []):
-            sn, ld = v.get("snippet", {}), v.get("liveStreamingDetails", {})
-            if sn.get("liveBroadcastContent") != "live":
-                continue
-            r = rows[owner[v["id"]]]
-            r.update(live=True, name=sn.get("channelTitle") or r["name"], title=sn.get("title", ""), video_id=v["id"],
-                     play_url=f"{WEB}/watch?v={v['id']}", viewers=int(ld.get("concurrentViewers") or 0),
-                     started_at=ld.get("actualStartTime", ""), language=sn.get("defaultAudioLanguage", "")[:2])
+        for vid in re.findall(r"<yt:videoId>([^<]+)</yt:videoId>", res):
+            if vid not in seen:
+                owner[vid] = c["id"]
+    try:
+        items = lookup(list(owner)) if owner else []
+    except Exception as e:
+        errors.append(f"youtube API: {e}")
+        items = []
+    for v in items:
+        sn, ld = v.get("snippet", {}), v.get("liveStreamingDetails", {})
+        state = sn.get("liveBroadcastContent")
+        if state == "none":
+            seen.add(v["id"])
+            continue
+        if state != "live" or v["id"] not in owner:
+            continue
+        r = rows[owner[v["id"]]]
+        r.update(live=True, name=sn.get("channelTitle") or r["name"], title=sn.get("title", ""), video_id=v["id"],
+                 play_url=f"{WEB}/watch?v={v['id']}", viewers=int(ld.get("concurrentViewers") or 0),
+                 started_at=ld.get("actualStartTime", ""), language=(sn.get("defaultAudioLanguage") or "")[:2])
+    if items:
+        config.write_json(SEEN_FILE, sorted(seen)[-50000:])
     return list(rows.values()), errors
 
 
-def check(chans):
+def _key_lookup(key):
+    def lookup(ids):
+        out = []
+        for i in range(0, len(ids), 50):
+            out += net.fetch_json(f"{API}?part=snippet,liveStreamingDetails&id={','.join(ids[i:i + 50])}&key={key}").get("items", [])
+        return out
+    return lookup
+
+
+def check(chans, google_rec=None):
+    """Live rows for the channels. Signed in with Google (or with an API key): RSS + videos.list. Otherwise /live pages."""
+    from . import google
     key = config.youtube_api_key()
-    if key and all(c.get("channel_id") for c in chans):
-        return check_api(chans, key)
-    return check_pages(chans)
+    lookup = (lambda ids: google.videos(ids, google_rec)) if google_rec else _key_lookup(key) if key else None
+    if not lookup:
+        return check_pages(chans)
+    with_id = [c for c in chans if c.get("channel_id")]
+    rows, errors = check_feeds(with_id, lookup)
+    rest = [c for c in chans if not c.get("channel_id")]
+    if rest:
+        r2, e2 = check_pages(rest)
+        rows += r2; errors += e2
+    return rows, errors
+
+
+def merge(*lists):
+    """One channel list from several (your own list + subscriptions), without duplicates."""
+    out, ids = [], set()
+    for lst in lists:
+        for c in lst or []:
+            k = c.get("channel_id") or c["id"].lower()
+            if k not in ids:
+                ids.add(k)
+                out.append(c)
+    return out
 
 
 def resolve(text):

@@ -13,7 +13,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, OptionList, Select, SelectionList, Static
 from textual.widgets.option_list import Option
 
-from . import channels, config, demo, kick, net, twitch, youtube
+from . import channels, config, demo, google, kick, net, twitch, youtube
 from .common import human
 from .i18n import t
 
@@ -66,32 +66,77 @@ def copy_text(app, text):
     return False
 
 
+class _Twitch:
+    title = "Sign in with Twitch"
+    sub = "openlive only asks to read who you follow. It can't chat, follow or change anything."
+    step1 = "1. Open the link (o) and log in to Twitch if asked."
+    step2 = "2. Check that this code matches and press Activate:"
+    open_label = "Open Twitch"
+    waiting = "Waiting for you to authorise on Twitch…"
+    unreachable = "Couldn't reach Twitch: {err}"
+    error = twitch.TwitchError
+
+    def ready(self):
+        return bool(config.client_id())
+
+    def start(self):
+        return twitch.start_device_login(config.client_id())
+
+    def poll(self, device_code):
+        cid = config.client_id()
+        tok = twitch.poll_device_login(cid, device_code)
+        return twitch.finish_login(cid, tok) if tok else None
+
+
+class _Google:
+    title = "Sign in with Google"
+    sub = "For your YouTube subscriptions. openlive only asks to read them: it can't comment, subscribe or change anything."
+    step1 = "1. Open the link (o) and choose your YouTube account."
+    step2 = "2. Type this code there and allow access:"
+    open_label = "Open Google"
+    waiting = "Waiting for you to allow access on Google…"
+    unreachable = "Couldn't reach Google: {err}"
+    error = google.GoogleError
+
+    def ready(self):
+        return True
+
+    def start(self):
+        return google.start_device_login()
+
+    def poll(self, device_code):
+        tok = google.poll_device_login(device_code)
+        return google.finish_login(tok) if tok else None
+
+
 class LoginScreen(ModalScreen):
-    """Sign in with Twitch. Dismisses with the saved auth record, or None when cancelled."""
+    """Sign in with a code (Twitch or Google). Dismisses with the saved auth record, or None when cancelled."""
 
     BINDINGS = [("escape", "cancel", ""), ("o", "open", ""), ("c", "copy", "")]
 
-    def __init__(self):
+    def __init__(self, provider="twitch"):
         super().__init__()
+        self.provider = provider
+        self.p = _Google() if provider == "google" else _Twitch()
         self.device, self.cancelled = None, False
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="dialog"):
-            yield Static(t("Sign in with Twitch"), classes="title")
-            yield Static(t("openlive only asks to read who you follow. It can't chat, follow or change anything."), classes="sub")
-            yield Static(t("1. Open the link (o) and log in to Twitch if asked."), classes="step")
-            yield Static(t("2. Check that this code matches and press Activate:"), classes="step")
+            yield Static(t(self.p.title), classes="title")
+            yield Static(t(self.p.sub), classes="sub")
+            yield Static(t(self.p.step1), classes="step")
+            yield Static(t(self.p.step2), classes="step")
             yield Static("········", id="code")
             yield Static("", id="url")
             yield Static(t("Getting a code…"), id="login-status")
             with Horizontal(classes="buttons"):
-                yield Button(t("Cancel"), id="cancel")
+                yield Button(t("Skip") if self.provider == "google" else t("Cancel"), id="cancel")
                 yield Button(t("Copy link"), id="copy")
-                yield Button(t("Open Twitch"), id="open", variant="primary")
+                yield Button(t(self.p.open_label), id="open", variant="primary")
 
     def on_mount(self):
         self.query_one("#open").focus()
-        if not config.client_id():
+        if not self.p.ready():
             self.query_one("#code").update("—")
             self.query_one("#login-status").update(t("No Twitch Client ID set. Create a Public app at {url} and put its Client ID in the config file as client_id.", url=NEW_APP_URL))
             return
@@ -99,26 +144,27 @@ class LoginScreen(ModalScreen):
 
     @work(thread=True, exclusive=True)
     def run_login(self):
-        cid = config.client_id()
         try:
-            d = twitch.start_device_login(cid)
-        except twitch.TwitchError as e:
-            self.app.call_from_thread(self._status, t("Couldn't reach Twitch: {err}", err=e), True)
+            d = self.p.start()
+        except self.p.error as e:
+            self.app.call_from_thread(self._status, t(self.p.unreachable, err=e), True)
             return
         self.device = d
         self.app.call_from_thread(self._show_code, d)
         deadline = time.time() + int(d.get("expires_in", 1800))
+        interval = max(1, int(d.get("interval", 5)))
         while not self.cancelled and time.time() < deadline:
-            time.sleep(max(1, int(d.get("interval", 5))))
+            wake = time.time() + interval
+            while time.time() < wake and not self.cancelled:
+                time.sleep(0.2)
             if self.cancelled:
                 return
             try:
-                tok = twitch.poll_device_login(cid, d["device_code"])
-                if tok:
-                    rec = twitch.finish_login(cid, tok)
+                rec = self.p.poll(d["device_code"])
+                if rec:
                     self.app.call_from_thread(self.dismiss, rec)
                     return
-            except twitch.TwitchError as e:
+            except self.p.error as e:
                 self.app.call_from_thread(self._status, t("Sign-in failed: {err}. Press Cancel and try again.", err=e), True)
                 return
         if not self.cancelled:
@@ -127,7 +173,7 @@ class LoginScreen(ModalScreen):
     def _show_code(self, d):
         self.query_one("#code").update(d["user_code"])
         self.query_one("#url").update(d["verification_uri"].split("?")[0])
-        self._status(t("Waiting for you to authorise on Twitch…"))
+        self._status(t(self.p.waiting))
 
     def _status(self, msg, error=False):
         w = self.query_one("#login-status")
@@ -137,7 +183,7 @@ class LoginScreen(ModalScreen):
     def _url(self):
         if self.device:
             return self.device["verification_uri"]
-        return NEW_APP_URL if not config.client_id() else None
+        return NEW_APP_URL if not self.p.ready() else None
 
     def action_open(self):
         if url := self._url():
@@ -161,7 +207,7 @@ class LoginScreen(ModalScreen):
 PLATFORM_HINT = {
     "twitch": "sign in once; your follows come from your account",
     "kick": "add the channels you watch (no sign-in)",
-    "youtube": "live only; add channels or import subscriptions",
+    "youtube": "live only; sign in with Google for your subscriptions",
 }
 
 
@@ -254,7 +300,8 @@ class AddChannelScreen(ModalScreen):
             self.query_one(sel).display = yt
         self.query_one("#add-sub").update(
             t("Kick doesn't share who you follow, so openlive keeps its own list.") if not yt
-            else t("Signed in with Google, your subscriptions come on their own. Here you can add others."))
+            else t("Signed in with Google, your subscriptions come on their own. Here you can add others.") if google.load_auth()
+            else t("Sign in with Google (g) to bring your subscriptions, or add channels here."))
         self.query_one("#add-label").update(t("Type a channel name: results show up as you type.") if not yt
                                             else t("Channel name or link. Several at once: separate them with commas."))
         self.query_one("#add-example").update(

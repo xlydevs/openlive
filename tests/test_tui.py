@@ -114,3 +114,18 @@ async def test_add_dialog_kick_search(tmp_path):
         await pilot.press("down", "enter")
         await pilot.pause(0.2)
         assert channels.load()["kick"] == [{"id": "emberfox_clips", "name": "EmberFoxClips"}]
+
+
+async def test_first_run_youtube_offers_google_sign_in(tmp_path, monkeypatch):
+    from openlive import config, google, onboard
+    from openlive.tui import make_app
+    monkeypatch.setattr(config, "CONFIG", {"platforms": {"enabled": ["youtube"]}})
+    monkeypatch.setattr(google, "start_device_login", lambda: {"device_code": "d", "user_code": "ABC-DEF", "verification_uri": "https://www.google.com/device", "interval": 30})
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.5)
+        assert isinstance(app.screen, onboard.LoginScreen) and app.screen.provider == "google"
+        assert "ABC-DEF" in str(app.screen.query_one("#code").render())
+        await pilot.press("escape")  # skip: then it asks for channels by hand
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, onboard.AddChannelScreen)

@@ -1,4 +1,5 @@
 """Textual TUI."""
+import time
 from datetime import datetime
 
 from rich.text import Text
@@ -10,7 +11,7 @@ from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
-from . import channels, config, demo, kick, onboard, player, twitch, youtube
+from . import channels, config, demo, google, kick, onboard, player, twitch, youtube
 from .common import (
     ACCENT,
     BG,
@@ -78,6 +79,7 @@ class Commands(Provider):
     async def search(self, query: str) -> Hits:
         app = self.app
         cmds = [(t("Sign in with Twitch"), app.action_login), (t("Sign out of Twitch"), app.action_logout),
+                (t("Sign in with Google (YouTube subscriptions)"), app.action_google_login), (t("Sign out of Google"), app.action_google_logout),
                 (t("Add Kick or YouTube channels"), app.action_add), (t("Choose platforms"), app.action_platforms),
                 (t("Refresh now"), app.action_refresh)]
         matcher = self.matcher(query)
@@ -278,6 +280,7 @@ class OpenLive(App):
         Binding("x", "remove", t("Remove"), show=False),
         Binding("p", "platforms", t("Platforms"), show=False),
         Binding("l", "login", t("Sign in"), show=False),
+        Binding("g", "google_login", "Google", show=False),
         Binding("escape", "unfocus", "", show=False),
         *[Binding(channels.KEY[p], f"toggle('{p}')", "", show=False) for p in channels.ALL],
         *[Binding(str(i + 1), f"tab('{k}')", "", show=False) for i, k in enumerate(TABS)],
@@ -288,6 +291,9 @@ class OpenLive(App):
         self.demo = demo_mode
         self.auth = None
         self.client = None
+        self.gauth = None
+        self.skipped = set()   # setup steps already offered this session
+        self.yt_at = 0.0       # last YouTube check (signed in: every few minutes, it costs API quota)
         self.favs = {"lunacodes", "kick:emberfox"} if demo_mode else config.favourites()
         self.platforms = list(channels.ALL) if demo_mode else (config.enabled_platforms() or [])
         self.platform_on = set(self.platforms)
@@ -338,6 +344,7 @@ class OpenLive(App):
         cached = config.read_json(CACHE) or {}
         for k in ("twitch", "youtube"):  # Kick playback links expire: never reuse them
             self.src[k] = cached.get(k, []) or []
+        self.gauth = google.load_auth()
         self.auth = twitch.load_auth()
         if self.auth:
             self.client = twitch.Client(self.auth)
@@ -350,12 +357,22 @@ class OpenLive(App):
             self.start()
 
     def start(self):
-        """After the platforms are known: sign in to Twitch if needed, ask for channels if a list is empty, load."""
-        if "twitch" in self.platforms and not self.auth:
-            self.call_after_refresh(self.action_login)
-        elif any(p in self.platforms and not channels.load()[p] for p in channels.LISTED):
-            self.call_after_refresh(self.action_add)
+        """After the platforms are known: load, then offer whatever setup is still missing."""
         self.load_live()
+        self.next_setup()
+
+    def next_setup(self):
+        """One step at a time: Twitch sign-in, Google sign-in, then channels for empty lists. Each is offered once."""
+        if self.demo: return
+        lists = channels.load()
+        steps = [("twitch", "twitch" in self.platforms and not self.auth, self.action_login),
+                 ("google", "youtube" in self.platforms and not self.gauth and not lists["youtube"], self.action_google_login),
+                 ("add", any(p in self.platforms and not lists[p] and not (p == "youtube" and self.gauth) for p in channels.LISTED), self.action_add)]
+        for name, needed, fn in steps:
+            if needed and name not in self.skipped:
+                self.skipped.add(name)
+                self.call_after_refresh(fn)
+                return
 
     # ── data ──
     def rebuild(self):
@@ -372,16 +389,21 @@ class OpenLive(App):
         self.pane("live").set_rows([r for r in live if r.get("platform", "twitch") in en])
         self.pane("following").set_rows([r for r in follow if r.get("platform", "twitch") in en])
 
-    def load_live(self):
+    def load_live(self, force=True):
         if self.demo: return
         if "twitch" in self.platforms and self.client:
             self.load_twitch("live")
         lists = channels.load()
-        for p in channels.LISTED:
-            if p in self.platforms and lists[p]:
-                self.load_listed(p, lists[p])
-            elif not lists[p]:
-                self.src[p] = []
+        if "kick" in self.platforms and lists["kick"]:
+            self.load_listed("kick", lists["kick"])
+        elif not lists["kick"]:
+            self.src["kick"] = []
+        if "youtube" in self.platforms and (lists["youtube"] or self.gauth):
+            if force or not self.gauth or time.time() - self.yt_at > 150:
+                self.yt_at = time.time()
+                self.load_listed("youtube", lists["youtube"])
+        elif not lists["youtube"] and not self.gauth:
+            self.src["youtube"] = []
         self.rebuild()
 
     def _save_cache(self):
@@ -415,7 +437,17 @@ class OpenLive(App):
             if platform == "kick":
                 rows, errors = kick.check([c["id"] for c in chans])
             else:
-                rows, errors = youtube.check(chans)
+                rec, extra = self.gauth, []
+                if rec:
+                    try:
+                        chans = youtube.merge(chans, google.subscriptions(rec))
+                    except google.NotSignedIn:
+                        rec = None
+                        self.call_from_thread(self._google_signed_out)
+                    except google.GoogleError as e:
+                        extra.append(f"Google: {e}")
+                rows, errors = youtube.check(chans, rec)
+                errors += extra
             self.call_from_thread(self._set_src, platform, rows)
             if errors:
                 self.call_from_thread(self._warn, t("{n} channel(s) couldn't be read", n=len(errors)))
@@ -476,7 +508,7 @@ class OpenLive(App):
 
     def auto_refresh(self):
         if self.demo: return
-        self.load_live()
+        self.load_live(force=False)
         if self.current == "following" and self.client and "twitch" in self.platforms:
             self.load_twitch("following")
         elif self.current == "browse" and self.client:
@@ -499,6 +531,12 @@ class OpenLive(App):
             else:
                 who.append(t("Twitch: not signed in · l"), style=WARN_C)
             who.append("   ")
+        if "youtube" in self.platforms and not self.demo:
+            if self.gauth:
+                who.append("▶ " + self.gauth.get("name", "YouTube"), style=MUTED)
+            else:
+                who.append(t("YouTube: sign in · g"), style=WARN_C)
+            who.append("   ")
         who.append(t("{n} live now", n=n), style=MUTED)
         if self.demo: who.append("   " + t("demo data"), style=WARN_C)
         self.query_one("#who").update(who)
@@ -518,7 +556,8 @@ class OpenLive(App):
             return t("This tab needs a Twitch sign-in (press l).")
         if kind not in TWITCH_ONLY:
             lists = channels.load() if not self.demo else {"kick": [1], "youtube": [1]}
-            usable = (self.auth and "twitch" in self.platforms) or any(p in self.platforms and lists[p] for p in channels.LISTED)
+            usable = (self.auth and "twitch" in self.platforms) or (self.gauth and "youtube" in self.platforms) \
+                or any(p in self.platforms and lists[p] for p in channels.LISTED)
             if not usable:
                 if "twitch" in self.platforms:
                     return t("Sign in with Twitch (l) or add Kick / YouTube channels (a).")
@@ -629,6 +668,8 @@ class OpenLive(App):
             self.rebuild()
             self.update_bar()
             self.notify(t("Removed {name} from your {platform} list.", name=r["name"], platform=channels.LABEL[r["platform"]]), timeout=3)
+        elif r["platform"] == "youtube" and self.gauth:
+            self.notify(t("That channel comes from your YouTube subscriptions."), timeout=3)
 
     def action_platforms(self, first_run=False):
         if self.demo or isinstance(self.screen, onboard.PlatformsScreen): return
@@ -664,8 +705,33 @@ class OpenLive(App):
             if self.current == "following":
                 self.load_twitch("following")
         self.update_bar()
-        if any(p in self.platforms and not channels.load()[p] for p in channels.LISTED):
-            self.call_after_refresh(self.action_add)
+        self.next_setup()
+
+    def action_google_login(self):
+        if self.demo or isinstance(self.screen, onboard.LoginScreen): return
+        self.push_screen(onboard.LoginScreen("google"), self._after_google_login)
+
+    def _after_google_login(self, rec):
+        if rec:
+            self.gauth = rec
+            self.notify(t("Signed in as {login}", login=rec.get("name", "YouTube")), timeout=3)
+            if "youtube" not in self.platforms:
+                self._after_platforms([*self.platforms, "youtube"])
+            self.yt_at = time.time()
+            self.load_listed("youtube", channels.load()["youtube"])
+        self.update_bar()
+        self.next_setup()
+
+    def _google_signed_out(self):
+        self.gauth = None
+        self.update_bar()
+
+    def action_google_logout(self):
+        if self.demo: return
+        google.logout()
+        self.gauth = None
+        self.load_live()
+        self.update_bar()
 
     def action_logout(self):
         if self.demo: return

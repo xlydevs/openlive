@@ -1,5 +1,5 @@
 """Plain-text output (--text, or when stdout is not a terminal)."""
-from . import channels, config, kick, twitch, youtube
+from . import channels, config, google, kick, twitch, youtube
 from .common import clip, human, uptime
 from .i18n import t
 
@@ -39,8 +39,16 @@ def run(demo_mode=False, out=print):
     if "kick" in platforms and lists["kick"]:
         r, err = kick.check([c["id"] for c in lists["kick"]])
         rows += r; problems += err
-    if "youtube" in platforms and lists["youtube"]:
-        r, err = youtube.check(lists["youtube"])
+    grec = google.load_auth()
+    if "youtube" in platforms and (lists["youtube"] or grec):
+        chans = lists["youtube"]
+        if grec:
+            try:
+                chans = youtube.merge(chans, google.subscriptions(grec))
+            except google.GoogleError as e:
+                problems.append(f"Google: {e}")
+                grec = None
+        r, err = youtube.check(chans, grec)
         rows += r; problems += err
     render(rows, out)
     for p in problems:
