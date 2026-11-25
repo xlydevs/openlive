@@ -622,10 +622,17 @@ class OpenLive(App):
         if self.demo:
             self.notify(t("Demo mode: would open {name} in your player.", name=r["name"]), timeout=3)
             return
-        ok, why = player.play(r, r["title"])
-        if ok:
-            self.notify(t("Opening {name}…", name=r["name"]), timeout=3)
-        elif why == "no-streamlink":
+        self.notify(t("Opening {name}…", name=r["name"]), timeout=3)
+        self.open_player(r)
+
+    @work(thread=True, group="player")
+    def open_player(self, r):
+        ok, why = player.play(r, r["title"], self.client)
+        if not ok:
+            self.call_from_thread(self._player_failed, why)
+
+    def _player_failed(self, why):
+        if why == "no-streamlink":
             self.notify(t("streamlink isn't installed. Reinstall openlive or run: pipx install streamlink"), severity="error", timeout=8)
         else:
             self.notify(t("No video player found. Install mpv (https://mpv.io), IINA or VLC, or set player in the config."),
