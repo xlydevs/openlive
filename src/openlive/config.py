@@ -123,29 +123,65 @@ def enabled_platforms():
     return [p for p in v if isinstance(p, str)] if isinstance(v, list) else None
 
 
-def save_platforms(names, path=None):
-    """Write [platforms] enabled = [...] keeping the rest of the file as it is."""
-    CONFIG.setdefault("platforms", {})["enabled"] = list(names)
+def _toml(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_toml(x) for x in v) + "]"
+    return json.dumps(str(v), ensure_ascii=False)
+
+
+def save_setting(key, value, section=None, path=None):
+    """Set one key in config.toml (top level, or in [section]) keeping the rest of the file as it is.
+    value None removes the key."""
+    target = CONFIG.setdefault(section, {}) if section else CONFIG
+    if value is None:
+        target.pop(key, None)
+    else:
+        target[key] = value
     if OFFLINE:
         return
     path = path or config_path()
-    line = "enabled = [" + ", ".join(f'"{n}"' for n in names) + "]"
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
-    sec, start, done = None, None, False
+    line = None if value is None else f"{key} = {_toml(value)}"
+    sec, start, insert_at = None, None, None
+    found = None
     for i, ln in enumerate(lines):
         st = ln.strip()
         if st.startswith("[") and st.endswith("]"):
-            if sec == "platforms" and not done:
-                j = i
-                while j > start + 1 and not lines[j - 1].strip(): j -= 1
-                lines.insert(j, line); done = True; break
+            if sec == section and insert_at is None:
+                insert_at = i
             sec = st.strip("[]").strip()
-            if sec == "platforms": start = i
-        elif sec == "platforms" and st.split("=")[0].strip() == "enabled":
-            lines[i] = line; done = True; break
-    if not done:
-        if start is None:
-            lines += (["", "[platforms]"] if lines else ["[platforms]"])
-        lines.append(line)
+            if sec == section:
+                start = i
+            continue
+        if sec == section and not st.startswith("#") and st.split("=")[0].strip() == key and "=" in st:
+            found = i
+            break
+    if found is not None:
+        if line is None:
+            del lines[found]
+        else:
+            lines[found] = line
+    elif line is not None:
+        if section is None:
+            first = next((i for i, ln in enumerate(lines) if ln.strip().startswith("[")), len(lines))
+            while first > 0 and not lines[first - 1].strip():
+                first -= 1
+            lines.insert(first, line)
+        elif start is None:
+            lines += (["", f"[{section}]"] if lines else [f"[{section}]"]) + [line]
+        else:
+            j = len(lines) if insert_at is None else insert_at
+            while j > start + 1 and not lines[j - 1].strip():
+                j -= 1
+            lines.insert(j, line)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def save_platforms(names, path=None):
+    """Write [platforms] enabled = [...] keeping the rest of the file as it is."""
+    save_setting("enabled", list(names), "platforms", path)
