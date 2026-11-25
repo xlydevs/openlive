@@ -1,0 +1,14 @@
+# personal data of the old shell script, never publish
+config.env
+channels.txt
+drops/
+twitch.sh
+
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openlive"
+dynamic = ["version"]
+description = "Who you follow is live on Twitch right now, in a terminal dashboard. Pick one and watch it in your own player."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "xlydevs" }]
+keywords = ["twitch", "live", "streams", "streamlink", "mpv", "tui", "textual"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = ["textual>=8.0", "streamlink>=7.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.scripts]
+openlive = "openlive.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/xlydevs/openlive"
+Issues = "https://github.com/xlydevs/openlive/issues"
+
+[tool.hatch.version]
+path = "src/openlive/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openlive"]
+
+[tool.ruff]
+line-length = 180
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E701", "E702", "E731", "B905", "UP015"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/openlive/i18n.py" = ["E501"]
+"src/openlive/onboard.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
