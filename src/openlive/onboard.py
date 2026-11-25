@@ -5,17 +5,31 @@ import sys
 import time
 import webbrowser
 
+from rich.text import Text
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
+from textual.widgets import Button, Input, Select, SelectionList, Static
 
-from . import config, twitch
+from . import channels, config, kick, net, twitch, youtube
 from .i18n import t
 
 CSS = """
-LoginScreen { align: center middle; background: #0f1420 70%; }
+LoginScreen, PlatformsScreen, AddChannelScreen { align: center middle; background: #0f1420 70%; }
+#platforms { height: auto; background: #141b2a; border: none; padding: 0; }
+#platforms:focus { background-tint: transparent; }
+#platforms > .selection-list--button { color: #1a2335; background: #1a2335; }
+#platforms > .selection-list--button-highlighted { color: #2a3754; background: #2a3754; }
+#platforms > .selection-list--button-selected, #platforms > .selection-list--button-selected-highlighted { color: #0f1420; background: #a5d68f; text-style: bold; }
+#platforms > .option-list--option-highlighted { background: #222c42; }
+.dialog Input { background: #0f1420; border: round #263044; margin-bottom: 1; }
+.dialog Input:focus { border: round #f2cc8f; }
+.dialog Select { margin-bottom: 1; }
+.dialog SelectCurrent { background: #0f1420; border: round #263044; }
+.dialog .label { color: #7c879f; }
+.dialog .hint { color: #4b5570; margin-bottom: 1; }
+#add-status { color: #7c879f; height: auto; }
 .dialog { width: 72; max-width: 95%; height: auto; max-height: 95%; border: round #f2cc8f; background: #141b2a; padding: 1 2; }
 .dialog .title { text-style: bold; color: #eef2fa; }
 .dialog .sub { color: #7c879f; margin-bottom: 1; }
@@ -136,3 +150,160 @@ class LoginScreen(ModalScreen):
 
     def on_button_pressed(self, event):
         {"open": self.action_open, "copy": self.action_copy, "cancel": self.action_cancel}[event.button.id]()
+
+
+# ───────────────────────── platforms ─────────────────────────
+
+PLATFORM_HINT = {
+    "twitch": "sign in once; your follows come from your account",
+    "kick": "add the channels you watch (no sign-in)",
+    "youtube": "live only; add channels or import subscriptions",
+}
+
+
+class PlatformsScreen(ModalScreen):
+    """Pick the platforms openlive shows. Dismisses with the list, or None when cancelled."""
+
+    BINDINGS = [("escape", "cancel", "")]
+
+    def __init__(self, selected, first_run=False):
+        super().__init__()
+        self.selected, self.first_run = set(selected), first_run
+
+    def compose(self) -> ComposeResult:
+        opts = []
+        for p in channels.ALL:
+            lbl = Text()
+            lbl.append("● ", style=channels.COLOR[p])
+            lbl.append(f"{channels.LABEL[p]:<9}", style="#eef2fa")
+            lbl.append(t(PLATFORM_HINT[p]), style="#7c879f")
+            opts.append((lbl, p, p in self.selected))
+        with Vertical(classes="dialog"):
+            yield Static(t("Which platforms do you watch?"), classes="title")
+            yield Static(t("You can change this any time with the p key."), classes="sub")
+            yield SelectionList(*opts, id="platforms")
+            with Horizontal(classes="buttons"):
+                if not self.first_run:
+                    yield Button(t("Cancel"), id="cancel")
+                yield Button(t("Save"), id="save", variant="primary")
+
+    def on_mount(self):
+        self.query_one("#platforms").focus()
+
+    def _chosen(self):
+        return [p for p in channels.ALL if p in self.query_one("#platforms", SelectionList).selected]
+
+    def on_button_pressed(self, event):
+        if event.button.id == "save":
+            ch = self._chosen()
+            if not ch:
+                self.app.notify(t("Pick at least one platform."), severity="warning", timeout=3)
+                return
+            self.dismiss(ch)
+        else:
+            self.dismiss(None)
+
+    def action_cancel(self):
+        self.dismiss((self._chosen() or ["twitch"]) if self.first_run else None)
+
+
+class AddChannelScreen(ModalScreen):
+    """Add Kick/YouTube channels to the user's lists. Dismisses with the number of channels added."""
+
+    BINDINGS = [("escape", "cancel", "")]
+
+    def __init__(self, platforms, platform=None):
+        super().__init__()
+        self.platforms = [p for p in channels.LISTED if p in platforms] or list(channels.LISTED)
+        self.platform = platform if platform in self.platforms else self.platforms[0]
+        self.added = 0
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Static(t("Add channels"), classes="title")
+            yield Static(t("Kick and YouTube don't share who you follow, so openlive keeps its own list."), classes="sub")
+            yield Select([(channels.LABEL[p], p) for p in self.platforms], value=self.platform, allow_blank=False, id="add-platform")
+            yield Static(t("Channel name or link. Several at once: separate them with commas."), classes="label")
+            yield Input(placeholder="", id="add-input")
+            yield Static("", classes="hint", id="add-example")
+            yield Static(t("Or import your YouTube subscriptions: path to subscriptions.csv from Google Takeout"), classes="label", id="takeout-label")
+            yield Input(placeholder="~/Downloads/Takeout/YouTube and YouTube Music/subscriptions/subscriptions.csv", id="takeout")
+            yield Static("", id="add-status")
+            with Horizontal(classes="buttons"):
+                yield Button(t("Close"), id="cancel")
+                yield Button(t("Open Takeout"), id="open-takeout")
+                yield Button(t("Add"), id="add", variant="primary")
+
+    def on_mount(self):
+        self._sync()
+        self.query_one("#add-input").focus()
+
+    def _sync(self):
+        yt = self.platform == "youtube"
+        for sel in ("#takeout-label", "#takeout", "#open-takeout"):
+            self.query_one(sel).display = yt
+        self.query_one("#add-example").update(
+            t("e.g. @LofiGirl, youtube.com/@mkbhd") if yt else t("e.g. xqc, kick.com/trainwreckstv"))
+
+    def on_select_changed(self, event):
+        if event.value in channels.LISTED:
+            self.platform = event.value
+            self._sync()
+
+    def on_input_submitted(self, event):
+        self.action_add()
+
+    def on_button_pressed(self, event):
+        {"add": self.action_add, "cancel": self.action_cancel, "open-takeout": self.action_takeout}[event.button.id]()
+
+    def action_takeout(self):
+        webbrowser.open(youtube.TAKEOUT_URL)
+        self._status(t("In Takeout pick only YouTube → subscriptions, export, unzip, then paste the path of subscriptions.csv here."))
+
+    def _status(self, msg, error=False):
+        w = self.query_one("#add-status")
+        w.update(msg)
+        w.styles.color = "#f28b82" if error else "#7c879f"
+
+    def action_add(self):
+        text = self.query_one("#add-input", Input).value
+        path = self.query_one("#takeout", Input).value.strip() if self.platform == "youtube" else ""
+        items = [x for x in (s.strip() for s in text.replace("\n", ",").split(",")) if x]
+        if not items and not path:
+            self.query_one("#add-input").focus()
+            return
+        self._status(t("Checking…"))
+        self.run_add(self.platform, items, path)
+
+    @work(thread=True, exclusive=True)
+    def run_add(self, platform, items, path):
+        lists = channels.load()
+        added, failed = [], []
+        if path:
+            try:
+                for rec in youtube.read_takeout(path):
+                    if channels.add(lists, "youtube", rec):
+                        added.append(rec["name"])
+            except (OSError, ValueError) as e:
+                failed.append(f"{path}: {e}")
+        resolver = kick.resolve if platform == "kick" else youtube.resolve
+        for item, res in net.parallel(resolver, items):
+            if isinstance(res, Exception):
+                failed.append(f"{item}: {res}")
+            elif channels.add(lists, platform, res):
+                added.append(res["name"])
+        channels.save(lists)
+        self.added += len(added)
+        msg = t("Added {n}: {names}", n=len(added), names=", ".join(added[:6]) + ("…" if len(added) > 6 else "")) if added else t("Nothing new added.")
+        if failed:
+            msg += "\n" + t("Couldn't add: {items}", items="; ".join(failed[:4]))
+        self.app.call_from_thread(self._done, msg, bool(failed) and not added)
+
+    def _done(self, msg, error):
+        self._status(msg, error)
+        self.query_one("#add-input", Input).value = ""
+        self.query_one("#takeout", Input).value = ""
+        self.query_one("#add-input").focus()
+
+    def action_cancel(self):
+        self.dismiss(self.added)

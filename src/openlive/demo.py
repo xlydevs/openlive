@@ -27,10 +27,22 @@ _BROWSE = [
 ]
 
 
-def _rows(items, rng, now):
+_KICK = [
+    ("emberfox", "EmberFox", "Just Chatting", 6400, "late night talk show · call-ins open", "en"),
+    ("ruta_libre", "RutaLibre", "IRL", 2100, "caminando por Lisboa en directo", "es"),
+]
+_KICK_OFF = ["neonpike", "slatewren"]
+_YT = [
+    ("@cozybeatsradio", "Cozy Beats Radio", "Music", 9800, "lofi radio 24/7 — beats to study to", "en"),
+    ("@starwatchlive", "StarWatch Live", "Science & Technology", 3300, "rocket launch coverage — T-minus 40 min", "en"),
+]
+_YT_OFF = ["@gardengrid", "@pocketkitchen"]
+
+
+def _rows(items, rng, now, platform="twitch"):
     out = []
     for login, name, game, viewers, title, lang in items:
-        out.append({"login": login, "name": name, "game": game, "viewers": viewers + rng.randint(-viewers // 20, viewers // 20),
+        out.append({"platform": platform, "login": login, "name": name, "game": game, "viewers": viewers + rng.randint(-viewers // 20, viewers // 20),
                     "title": title, "language": lang, "tags": [lang.upper(), game.split()[0]], "live": True,
                     "started_at": (now - timedelta(minutes=rng.randint(12, 520))).isoformat().replace("+00:00", "Z")})
     return out
@@ -40,10 +52,17 @@ def data(seed=7):
     rng = random.Random(seed)
     now = datetime.now(UTC)
     live = _rows(_LIVE, rng, now)
-    following = live + [{"login": o, "name": o.capitalize(), "game": "", "viewers": 0, "title": "", "started_at": "",
+    following = live + [{"platform": "twitch", "login": o, "name": o.capitalize(), "game": "", "viewers": 0, "title": "", "started_at": "",
                          "language": "", "tags": [], "live": False} for o in _OFF]
     browse = sorted(_rows(_BROWSE, rng, now) + live, key=lambda r: -r["viewers"])
-    return {"live": live, "following": following, "browse": browse}
+    kick = _rows(_KICK, rng, now, "kick") + [_off("kick", o, o.capitalize()) for o in _KICK_OFF]
+    yt = _rows(_YT, rng, now, "youtube") + [_off("youtube", o, o.lstrip("@").capitalize()) for o in _YT_OFF]
+    return {"live": live, "following": following, "browse": browse, "kick": kick, "youtube": yt}
+
+
+def _off(platform, login, name):
+    return {"platform": platform, "login": login, "name": name, "game": "", "viewers": 0, "title": "", "started_at": "",
+            "language": "", "tags": [], "live": False}
 
 
 def search(query):

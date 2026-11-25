@@ -1,6 +1,6 @@
 import pytest
 
-from openlive import config, i18n, onboard, twitch
+from openlive import channels, config, i18n, kick, onboard, twitch
 
 
 @pytest.mark.parametrize("lang", ["en", "es"])
@@ -13,7 +13,15 @@ async def test_tui_demo_smoke(lang, size):
     async with app.run_test(size=size) as pilot:
         await pilot.pause(0.2)
         live = app.pane("live")
-        assert live.shown and live.shown[0]["login"] in app.favs  # favourites first
+        assert live.shown and channels.row_key(live.shown[0]) in app.favs  # favourites first
+        assert {r["platform"] for r in live.shown} == {"twitch", "kick", "youtube"}
+        await pilot.press("k")  # hide Kick
+        assert all(r["platform"] != "kick" for r in live.shown)
+        await pilot.press("k")
+        await pilot.press("a")
+        await pilot.pause(0.1)
+        assert isinstance(app.screen, onboard.AddChannelScreen)
+        await pilot.press("escape")
         for key in ("2", "3", "4", "1"):
             await pilot.press(key)
             await pilot.pause(0.1)
@@ -34,7 +42,7 @@ async def test_header_click_sorts():
         await pilot.pause(0.2)
         p = app.pane("live")
         p.on_data_table_header_selected(type("E", (), {"column_key": type("K", (), {"value": "name"})()})())
-        assert [r["login"] for r in p.shown] == sorted(r["login"] for r in p.rows)
+        assert [r["name"].lower() for r in p.shown] == sorted(r["name"].lower() for r in p.rows)
 
 
 async def test_first_run_opens_sign_in(monkeypatch):
@@ -49,6 +57,7 @@ async def test_first_run_opens_sign_in(monkeypatch):
         raise AssertionError(url)
     monkeypatch.setattr(twitch, "_request", fake)
     monkeypatch.setattr(onboard.webbrowser, "open", lambda url: shown.setdefault("url", url))
+    config.CONFIG["platforms"] = {"enabled": ["twitch"]}
     from openlive.tui import make_app
     app = make_app()
     async with app.run_test(size=(120, 40)) as pilot:
@@ -61,3 +70,30 @@ async def test_first_run_opens_sign_in(monkeypatch):
         await pilot.pause(0.1)
         assert not isinstance(app.screen, onboard.LoginScreen)
         assert app.auth is None
+
+
+async def test_first_run_picks_platforms_and_adds_kick_channel(monkeypatch, tmp_path):
+    monkeypatch.setattr(kick, "resolve", lambda text: {"id": kick.parse(text), "name": "SomeOne"})
+    monkeypatch.setattr(kick, "check", lambda slugs: ([{"platform": "kick", "login": s, "name": "SomeOne", "live": True, "viewers": 5,
+                                                         "game": "Chess", "title": "hi", "started_at": "", "language": "", "tags": []}
+                                                        for s in slugs], []))
+    from openlive.tui import make_app
+    app = make_app()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, onboard.PlatformsScreen)
+        sel = app.screen.query_one("#platforms")
+        sel.deselect_all()
+        sel.select("kick")
+        await pilot.click("#save")
+        await pilot.pause(0.3)
+        assert app.platforms == ["kick"]
+        assert isinstance(app.screen, onboard.AddChannelScreen)  # Kick list is empty: ask for channels
+        app.screen.query_one("#add-input").value = "kick.com/someone"
+        await pilot.press("enter")
+        await pilot.pause(0.5)
+        await pilot.press("escape")
+        await pilot.pause(0.5)
+        assert channels.load()["kick"] == [{"id": "someone", "name": "SomeOne"}]
+        assert [r["login"] for r in app.pane("live").shown] == ["someone"]
+    assert 'enabled = ["kick"]' in (tmp_path / "config.toml").read_text()

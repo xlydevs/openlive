@@ -40,25 +40,42 @@ def streamlink_cmd():
         return [exe] if exe else None
 
 
-def build_command(channel, title="", quality=None, player=None):
+def stream_url(row_or_channel):
+    if isinstance(row_or_channel, str):
+        return f"https://twitch.tv/{row_or_channel}"
+    r = row_or_channel
+    if r.get("play_url"):
+        return r["play_url"]
+    return {"kick": f"https://kick.com/{r['login']}", "youtube": f"https://www.youtube.com/{_yt_path(r['login'])}/live"}.get(
+        r.get("platform"), f"https://twitch.tv/{r['login']}")
+
+
+def _yt_path(ch):
+    return ch if ch.startswith("@") else f"channel/{ch}"
+
+
+def build_command(target, title="", quality=None, player=None):
+    """target: a Twitch login (str) or a row dict from any platform."""
     sl = streamlink_cmd()
     pname, ppath = find_player(player)
     if not sl or not ppath:
         return None
+    url = stream_url(target)
+    name = target if isinstance(target, str) else target["name"]
     args = config.get("player_args", DEFAULT_ARGS.get(pname, ""))
-    cmd = [*sl, f"https://twitch.tv/{channel}", quality or config.get("quality", "best"), "--player", ppath]
+    cmd = [*sl, url, quality or config.get("quality", "best"), "--player", ppath]
     if args:
         cmd += ["--player-args", args]
     if title:
-        cmd += ["--title", f"{channel} · {title}"]
-    if config.get("low_latency", True):
+        cmd += ["--title", f"{name} · {title}"]
+    if config.get("low_latency", True) and "twitch.tv/" in url:
         cmd += ["--twitch-low-latency"]
     return cmd
 
 
-def play(channel, title=""):
-    """Start the player detached. Returns (ok, message_key)."""
-    cmd = build_command(channel, title)
+def play(target, title=""):
+    """Start the player detached. target: Twitch login or a row. Returns (ok, message_key)."""
+    cmd = build_command(target, title)
     if cmd is None:
         return False, "no-player" if streamlink_cmd() else "no-streamlink"
     log = None
@@ -75,9 +92,30 @@ def play(channel, title=""):
     return True, "ok"
 
 
-def open_web(channel):
-    webbrowser.open(f"https://www.twitch.tv/{channel}")
+def web_url(r):
+    if isinstance(r, str):
+        return f"https://www.twitch.tv/{r}"
+    if r.get("platform") == "kick":
+        return f"https://kick.com/{r['login']}"
+    if r.get("platform") == "youtube":
+        return f"https://www.youtube.com/watch?v={r['video_id']}" if r.get("video_id") else f"https://www.youtube.com/{_yt_path(r['login'])}"
+    return f"https://www.twitch.tv/{r['login']}"
 
 
-def open_chat(channel):
-    webbrowser.open(f"https://www.twitch.tv/popout/{channel}/chat?popout=")
+def chat_url(r):
+    if isinstance(r, str):
+        return f"https://www.twitch.tv/popout/{r}/chat?popout="
+    if r.get("platform") == "kick":
+        return f"https://kick.com/popout/{r['login']}/chat"
+    if r.get("platform") == "youtube":
+        return f"https://www.youtube.com/live_chat?v={r['video_id']}" if r.get("video_id") else None
+    return f"https://www.twitch.tv/popout/{r['login']}/chat?popout="
+
+
+def open_web(r):
+    webbrowser.open(web_url(r))
+
+
+def open_chat(r):
+    if url := chat_url(r):
+        webbrowser.open(url)

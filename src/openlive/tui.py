@@ -2,7 +2,7 @@
 from datetime import datetime
 
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
@@ -10,7 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
-from . import config, demo, onboard, player, twitch
+from . import channels, config, demo, kick, onboard, player, twitch, youtube
 from .common import (
     ACCENT,
     BG,
@@ -42,12 +42,16 @@ THEME = Theme(name="openlive", primary=ACCENT, secondary="#c3a6ff", accent=ACCEN
                          "footer-key-foreground": ACCENT, "input-selection-background": "#33415f"})
 
 TABS = ("live", "following", "browse", "search")
+TWITCH_ONLY = ("browse", "search")
 CACHE = "cache.json"
+SHORT = {"twitch": "TW", "kick": "KI", "youtube": "YT"}
 
 CSS = """
 Screen { background: #0f1420; }
 #topbar { height: 1; background: #141b2a; padding: 0 1; }
 #brand { width: auto; color: #f2cc8f; text-style: bold; margin-right: 2; }
+.chip { width: auto; margin-right: 2; }
+.chip:hover { background: #222c42; }
 #who { width: 1fr; color: #7c879f; }
 #status { width: auto; color: #7c879f; }
 TabbedContent { height: 1fr; }
@@ -66,19 +70,39 @@ DataTable > .datatable--odd-row { background: #0f1420; }
 DataTable > .datatable--header-hover { background: #222c42; }
 .detail { height: 2; color: #d6deeb; padding: 0 1; background: #141b2a; text-wrap: nowrap; text-overflow: ellipsis; }
 .empty { height: auto; color: #7c879f; padding: 1 1; display: none; }
-.-narrow #brand, .-narrow #status { display: none; }
+.-narrow #brand, .-narrow #status, .-narrow #who { display: none; }
 """ + onboard.CSS
 
 
 class Commands(Provider):
     async def search(self, query: str) -> Hits:
         app = self.app
-        cmds = [(t("Sign in with Twitch"), app.action_login), (t("Sign out"), app.action_logout),
+        cmds = [(t("Sign in with Twitch"), app.action_login), (t("Sign out of Twitch"), app.action_logout),
+                (t("Add Kick or YouTube channels"), app.action_add), (t("Choose platforms"), app.action_platforms),
                 (t("Refresh now"), app.action_refresh)]
         matcher = self.matcher(query)
         for name, fn in cmds:
             if (score := matcher.match(name)) > 0:
                 yield Hit(score, matcher.highlight(name), fn)
+
+
+class Chip(Static):
+    """● Platform in the top bar; click toggles it."""
+
+    def __init__(self, platform, **kw):
+        super().__init__(classes="chip", **kw)
+        self.platform = platform
+
+    def paint(self, on):
+        c = channels.COLOR[self.platform]
+        txt = Text()
+        txt.append("● ", style=c if on else DIM)
+        txt.append(channels.LABEL[self.platform], style=FG if on else f"{DIM} strike")
+        self.update(txt)
+        self.tooltip = t("press {key} to show or hide", key=channels.KEY[self.platform])
+
+    def on_click(self, event: events.Click):
+        self.app.action_toggle(self.platform)
 
 
 class StreamPane(Vertical):
@@ -94,8 +118,7 @@ class StreamPane(Vertical):
         ph = t("search any channel or game on Twitch, then Enter") if self.kind == "search" else t("filter by channel, game or title")
         yield Input(placeholder="/ " + ph, classes="filter", id=f"filter-{self.kind}")
         yield Static("", classes="empty", id=f"empty-{self.kind}")
-        dt = DataTable(id=f"table-{self.kind}", cursor_type="row", zebra_stripes=True)
-        yield dt
+        yield DataTable(id=f"table-{self.kind}", cursor_type="row", zebra_stripes=True)
         yield Static("", classes="detail", id=f"detail-{self.kind}")
 
     @property
@@ -109,7 +132,7 @@ class StreamPane(Vertical):
     def columns(self):
         w = self.table.size.width or self.size.width or 100
         narrow = w < 90
-        cols = [("fav", "", 2), ("name", t("Channel"), 18)]
+        cols = [("fav", "", 2), ("plat", "", 2), ("name", t("Channel"), 18)]
         if not narrow: cols.append(("game", t("Category"), 22))
         cols.append(("viewers", t("Viewers"), 8))
         if not narrow: cols.append(("uptime", t("Uptime"), 8))
@@ -119,24 +142,25 @@ class StreamPane(Vertical):
 
     def visible(self):
         q = self.query_one(Input).value.strip().lower() if self.kind != "search" else ""
-        rows = [r for r in self.rows if not q or q in r["login"] or q in r["name"].lower()
-                or q in r["game"].lower() or q in r["title"].lower()]
+        on = self.app.platform_on
+        rows = [r for r in self.rows if r.get("platform", "twitch") in on and (not q or q in r["login"].lower() or q in r["name"].lower()
+                or q in r["game"].lower() or q in r["title"].lower())]
         favs = self.app.favs
+        fav = lambda r: channels.row_key(r) in favs
         if self.sort_key:
-            k = self.sort_key
-            key = {"name": lambda r: r["login"], "game": lambda r: r["game"].lower(), "viewers": lambda r: r["viewers"],
-                   "uptime": lambda r: uptime_secs(r["started_at"]), "title": lambda r: r["title"].lower(),
-                   "fav": lambda r: r["login"] in favs}[k]
+            key = {"name": lambda r: r["name"].lower(), "game": lambda r: r["game"].lower(), "viewers": lambda r: r["viewers"],
+                   "uptime": lambda r: uptime_secs(r["started_at"]), "title": lambda r: r["title"].lower(), "fav": fav,
+                   "plat": lambda r: r.get("platform", "")}[self.sort_key]
             rows.sort(key=key, reverse=self.sort_rev)
         elif self.kind == "following":
-            rows.sort(key=lambda r: (r["login"] not in favs, not r["live"], -r["viewers"], r["login"]))
+            rows.sort(key=lambda r: (not fav(r), not r["live"], -r["viewers"], r["name"].lower()))
         elif self.kind != "search":
-            rows.sort(key=lambda r: (r["login"] not in favs, -r["viewers"]))
+            rows.sort(key=lambda r: (not fav(r), -r["viewers"]))
         return rows
 
     def render_rows(self):
         dt = self.table
-        cur = self.shown[dt.cursor_row]["login"] if self.shown and 0 <= dt.cursor_row < len(self.shown) else None
+        cur = channels.row_key(self.shown[dt.cursor_row]) if self.shown and 0 <= dt.cursor_row < len(self.shown) else None
         self.shown = self.visible()
         cols = self.columns()
         dt.clear(columns=True)
@@ -146,10 +170,13 @@ class StreamPane(Vertical):
         favs = self.app.favs
         tw = cols[-1][2]
         for r in self.shown:
+            p = r.get("platform", "twitch")
             cells = []
             for key, _, _ in cols:
                 if key == "fav":
-                    cells.append(Text("★", style=ACCENT) if r["login"] in favs else Text(""))
+                    cells.append(Text("★", style=ACCENT) if channels.row_key(r) in favs else Text(""))
+                elif key == "plat":
+                    cells.append(Text(SHORT[p], style=f"bold {channels.COLOR[p]}"))
                 elif key == "name":
                     c = Text("● ", style=LIVE_C if r["live"] else DIM)
                     c.append(r["name"], style=BRIGHT if r["live"] else MUTED)
@@ -163,10 +190,10 @@ class StreamPane(Vertical):
                     cells.append(Text(uptime(r["started_at"]) if r["live"] else "", style=MUTED, justify="right"))
                 elif key == "title":
                     cells.append(Text(clip(r["title"], tw), style=FG))
-            dt.add_row(*cells, key=r["login"])
+            dt.add_row(*cells, key=channels.row_key(r))
         if cur:
             for i, r in enumerate(self.shown):
-                if r["login"] == cur:
+                if channels.row_key(r) == cur:
                     dt.move_cursor(row=i)
                     break
         empty = self.query_one(".empty")
@@ -184,10 +211,12 @@ class StreamPane(Vertical):
         r = self.selected()
         d = self.query_one(".detail")
         if not r:
-            d.update(Text(t("↑↓ move · Enter watch · o open on Twitch · c chat · f favourite · click a header to sort"), style=DIM))
+            d.update(Text(t("↑↓ move · Enter watch · o open in browser · c chat · f favourite · a add channel · click a header to sort"), style=DIM))
             return
+        p = r.get("platform", "twitch")
         out = Text(no_wrap=True, overflow="ellipsis")
         out.append(r["name"], style=f"bold {BRIGHT}")
+        out.append(f"  {channels.LABEL[p]}", style=channels.COLOR[p])
         if r["live"]:
             out.append("  ● " + t("live"), style=LIVE_C)
             if r["game"]: out.append(f"  {r['game']}", style=game_color(r["game"]))
@@ -197,7 +226,9 @@ class StreamPane(Vertical):
             out.append("\n" + clip(r["title"], 400), style=FG)
         else:
             out.append("  " + t("offline"), style=DIM)
-            out.append("\n" + t("Enter opens the channel on Twitch."), style=MUTED)
+            hint = t("Enter opens the channel in the browser.")
+            if p in channels.LISTED: hint += "  " + t("x removes it from your list.")
+            out.append("\n" + hint, style=MUTED)
         d.update(out)
 
     def on_data_table_row_highlighted(self, event):
@@ -238,14 +269,17 @@ class OpenLive(App):
     HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (96, "-medium"), (150, "-wide")]
     BINDINGS = [
         Binding("q", "quit", t("Quit")),
-        Binding("enter", "watch", t("Watch"), show=True, priority=False),
-        Binding("o", "web", t("Open on Twitch")),
+        Binding("o", "web", t("Browser")),
         Binding("c", "chat", t("Chat")),
         Binding("f", "fav", t("Favourite")),
+        Binding("a", "add", t("Add")),
         Binding("slash", "filter", t("Search")),
         Binding("r", "refresh", t("Refresh")),
+        Binding("x", "remove", t("Remove"), show=False),
+        Binding("p", "platforms", t("Platforms"), show=False),
         Binding("l", "login", t("Sign in"), show=False),
         Binding("escape", "unfocus", "", show=False),
+        *[Binding(channels.KEY[p], f"toggle('{p}')", "", show=False) for p in channels.ALL],
         *[Binding(str(i + 1), f"tab('{k}')", "", show=False) for i, k in enumerate(TABS)],
     ]
 
@@ -254,8 +288,10 @@ class OpenLive(App):
         self.demo = demo_mode
         self.auth = None
         self.client = None
-        self.favs = set() if demo_mode else config.favourites()
-        if demo_mode: self.favs = {"lunacodes", "quietfox"}
+        self.favs = {"lunacodes", "kick:emberfox"} if demo_mode else config.favourites()
+        self.platforms = list(channels.ALL) if demo_mode else (config.enabled_platforms() or [])
+        self.platform_on = set(self.platforms)
+        self.src = {"twitch": [], "twitch_follow": None, "kick": [], "youtube": []}
         self.loaded = set()
         self.busy = 0
         self.last_ok = None
@@ -264,13 +300,15 @@ class OpenLive(App):
     def compose(self) -> ComposeResult:
         with Horizontal(id="topbar"):
             yield Static("◈ openlive", id="brand")
+            for p in channels.ALL:
+                yield Chip(p, id=f"chip-{p}")
             yield Static("", id="who")
             yield Static("", id="status")
         with TabbedContent(initial="live"):
             for k, label in zip(TABS, (t("Live"), t("Following"), t("Browse"), t("Search"))):
                 with TabPane(label, id=k):
                     pane = StreamPane(k, classes="box", id=f"pane-{k}")
-                    pane.border_title = label.upper()
+                    pane.border_title = (label + (" · Twitch" if k in TWITCH_ONLY else "")).upper()
                     yield pane
         yield Footer()
 
@@ -289,81 +327,98 @@ class OpenLive(App):
         if self.demo:
             self.auth = {"login": demo.LOGIN}
             d = demo.data()
-            for k in ("live", "following", "browse"):
-                self.pane(k).set_rows(d[k])
-                self.loaded.add(k)
+            self.src.update(twitch=d["live"], twitch_follow=d["following"], kick=d["kick"], youtube=d["youtube"])
+            self.pane("browse").set_rows(d["browse"])
+            self.loaded |= {"twitch", "following", "browse", "kick", "youtube"}
+            self.rebuild()
             self.last_ok = datetime.now()
             self.update_bar()
             self.pane("live").table.focus()
             return
         cached = config.read_json(CACHE) or {}
-        if cached.get("live"):
-            self.pane("live").set_rows(cached["live"])
+        for k in ("twitch", "youtube"):  # Kick playback links expire: never reuse them
+            self.src[k] = cached.get(k, []) or []
         self.auth = twitch.load_auth()
-        self.update_bar()
         if self.auth:
             self.client = twitch.Client(self.auth)
-            self.load("live")
-        else:
-            self.call_after_refresh(self.action_login)
+        self.rebuild()
+        self.update_bar()
         self.pane("live").table.focus()
-
-    # ── top bar ──
-    def update_bar(self):
-        who = Text()
-        if self.auth:
-            who.append("● ", style=OK_C)
-            who.append(self.auth["login"], style=FG)
-            n = sum(1 for r in self.pane("live").rows if r["live"])
-            who.append(f"   {t('{n} live now', n=n)}", style=MUTED)
-            if self.demo: who.append("   " + t("demo data"), style=WARN_C)
+        if not self.platforms:
+            self.call_after_refresh(self.action_platforms, True)
         else:
-            who.append("○ " + t("not signed in · press l"), style=WARN_C)
-        self.query_one("#who").update(who)
-        st = Text()
-        if self.busy:
-            st.append("⟳ " + t("loading…"), style=INFO_C)
-        elif self.warning:
-            st.append("⚠ " + self.warning, style=WARN_C)
-        elif self.last_ok:
-            st.append(f"✓ {self.last_ok:%H:%M}", style=OK_C)
-        self.query_one("#status").update(st)
+            self.start()
 
-    def empty_message(self, kind, has_rows):
-        if has_rows:
-            return t("Nothing matches the filter.")
-        if not self.auth:
-            return t("Sign in with Twitch to see who you follow (press l).")
-        if kind not in self.loaded and kind != "search":
-            return t("Loading…")
-        return {"live": t("Nobody you follow is live right now. Browse (3) shows the top streams."),
-                "following": t("You don't follow any channel yet."),
-                "browse": t("No streams found."),
-                "search": t("Type a channel or game above and press Enter.")}[kind]
+    def start(self):
+        """After the platforms are known: sign in to Twitch if needed, ask for channels if a list is empty, load."""
+        if "twitch" in self.platforms and not self.auth:
+            self.call_after_refresh(self.action_login)
+        elif any(p in self.platforms and not channels.load()[p] for p in channels.LISTED):
+            self.call_after_refresh(self.action_add)
+        self.load_live()
 
-    # ── loading ──
-    @work(thread=True, group="load")
-    def load(self, kind):
+    # ── data ──
+    def rebuild(self):
+        live = list(self.src["twitch"])
+        for p in channels.LISTED:
+            live += [r for r in self.src[p] if r["live"]]
+        follow = []
+        if self.src["twitch_follow"] is not None:
+            by = {r["login"]: r for r in self.src["twitch"]}
+            follow = [by.get(r["login"], r) for r in self.src["twitch_follow"]]
+        for p in channels.LISTED:
+            follow += self.src[p]
+        en = set(self.platforms)
+        self.pane("live").set_rows([r for r in live if r.get("platform", "twitch") in en])
+        self.pane("following").set_rows([r for r in follow if r.get("platform", "twitch") in en])
+
+    def load_live(self):
+        if self.demo: return
+        if "twitch" in self.platforms and self.client:
+            self.load_twitch("live")
+        lists = channels.load()
+        for p in channels.LISTED:
+            if p in self.platforms and lists[p]:
+                self.load_listed(p, lists[p])
+            elif not lists[p]:
+                self.src[p] = []
+        self.rebuild()
+
+    def _save_cache(self):
+        config.write_json(CACHE, {"twitch": self.src["twitch"], "youtube": self.src["youtube"]})
+
+    @work(thread=True, group="twitch")
+    def load_twitch(self, kind):
         if not self.client: return
         self.call_from_thread(self._busy, 1)
         try:
             if kind == "live":
                 rows = [twitch.norm_stream(s) for s in self.client.followed_live()]
-                config.write_json(CACHE, {"live": rows})
+                self.call_from_thread(self._set_src, "twitch", rows)
             elif kind == "following":
-                live = {r["login"]: r for r in self.pane("live").rows}
-                if "live" not in self.loaded:
-                    live = {s["user_login"]: twitch.norm_stream(s) for s in self.client.followed_live()}
-                rows = [live.get(c["broadcaster_login"]) or twitch.norm_followed(c) for c in self.client.followed_channels()]
+                rows = [twitch.norm_followed(c) for c in self.client.followed_channels()]
+                self.call_from_thread(self._set_src, "twitch_follow", rows, "following")
             elif kind == "browse":
                 rows = [twitch.norm_stream(s) for s in self.client.top_streams(config.get("browse_language"))]
-            else:
-                return
-            self.call_from_thread(self._loaded, kind, rows)
+                self.call_from_thread(self._loaded, "browse", rows)
         except twitch.NotSignedIn:
             self.call_from_thread(self._signed_out)
         except twitch.TwitchError as e:
-            self.call_from_thread(self._warn, str(e))
+            self.call_from_thread(self._warn, f"Twitch: {e}")
+        finally:
+            self.call_from_thread(self._busy, -1)
+
+    @work(thread=True)
+    def load_listed(self, platform, chans):
+        self.call_from_thread(self._busy, 1)
+        try:
+            if platform == "kick":
+                rows, errors = kick.check([c["id"] for c in chans])
+            else:
+                rows, errors = youtube.check(chans)
+            self.call_from_thread(self._set_src, platform, rows)
+            if errors:
+                self.call_from_thread(self._warn, t("{n} channel(s) couldn't be read", n=len(errors)))
         finally:
             self.call_from_thread(self._busy, -1)
 
@@ -372,7 +427,9 @@ class OpenLive(App):
         if self.demo:
             self.call_from_thread(self._loaded, "search", demo.search(query))
             return
-        if not self.client: return
+        if not self.client:
+            self.call_from_thread(self._warn, t("Search needs a Twitch sign-in"))
+            return
         self.call_from_thread(self._busy, 1)
         try:
             found = [twitch.norm_search(c) for c in self.client.search(query)]
@@ -392,6 +449,14 @@ class OpenLive(App):
         self.busy = max(0, self.busy + d)
         self.update_bar()
 
+    def _set_src(self, key, rows, loaded=None):
+        self.src[key] = rows
+        self.loaded.add(loaded or key)
+        self.rebuild()
+        self._save_cache()
+        self.warning, self.last_ok = "", datetime.now()
+        self.update_bar()
+
     def _loaded(self, kind, rows):
         self.loaded.add(kind)
         self.pane(kind).set_rows(rows)
@@ -399,42 +464,101 @@ class OpenLive(App):
         self.update_bar()
 
     def _warn(self, msg):
-        self.warning = clip(msg, 40)
+        self.warning = clip(msg, 44)
         self.update_bar()
 
     def _signed_out(self):
         self.auth, self.client = None, None
+        self.src.update(twitch=[], twitch_follow=None)
+        self.rebuild()
         self.update_bar()
         self.action_login()
 
     def auto_refresh(self):
-        if self.demo or not self.client: return
-        self.load("live")
-        if self.current in ("following", "browse"):
-            self.load(self.current)
+        if self.demo: return
+        self.load_live()
+        if self.current == "following" and self.client and "twitch" in self.platforms:
+            self.load_twitch("following")
+        elif self.current == "browse" and self.client:
+            self.load_twitch("browse")
 
     def repaint_uptimes(self):
         self.pane(self.current).render_rows()
 
+    # ── top bar ──
+    def update_bar(self):
+        for p in channels.ALL:
+            chip = self.query_one(f"#chip-{p}", Chip)
+            chip.display = p in self.platforms
+            chip.paint(p in self.platform_on)
+        who = Text()
+        n = sum(1 for r in self.pane("live").shown if r["live"])
+        if "twitch" in self.platforms:
+            if self.auth:
+                who.append(self.auth["login"], style=MUTED)
+            else:
+                who.append(t("Twitch: not signed in · l"), style=WARN_C)
+            who.append("   ")
+        who.append(t("{n} live now", n=n), style=MUTED)
+        if self.demo: who.append("   " + t("demo data"), style=WARN_C)
+        self.query_one("#who").update(who)
+        st = Text()
+        if self.busy:
+            st.append("⟳ " + t("loading…"), style=INFO_C)
+        elif self.warning:
+            st.append("⚠ " + self.warning, style=WARN_C)
+        elif self.last_ok:
+            st.append(f"✓ {self.last_ok:%H:%M}", style=OK_C)
+        self.query_one("#status").update(st)
+
+    def empty_message(self, kind, has_rows):
+        if has_rows:
+            return t("Nothing matches the filter, or its platform is hidden.")
+        if kind in TWITCH_ONLY and not self.auth:
+            return t("This tab needs a Twitch sign-in (press l).")
+        if kind not in TWITCH_ONLY:
+            lists = channels.load() if not self.demo else {"kick": [1], "youtube": [1]}
+            usable = (self.auth and "twitch" in self.platforms) or any(p in self.platforms and lists[p] for p in channels.LISTED)
+            if not usable:
+                if "twitch" in self.platforms:
+                    return t("Sign in with Twitch (l) or add Kick / YouTube channels (a).")
+                return t("Add the Kick / YouTube channels you watch with a.")
+        if kind == "browse" and kind not in self.loaded:
+            return t("Loading…")
+        return {"live": t("Nobody you follow is live right now. Browse (3) shows the top streams on Twitch."),
+                "following": t("No channels yet. Follow some on Twitch, or press a to add Kick / YouTube channels."),
+                "browse": t("No streams found."),
+                "search": t("Type a channel or game above and press Enter.")}[kind]
+
     # ── actions ──
     def on_tabbed_content_tab_activated(self, event):
         kind = event.pane.id
-        if kind not in self.loaded and kind != "search":
-            self.load(kind)
+        if kind == "following" and self.client and "twitch" in self.platforms and self.src["twitch_follow"] is None:
+            self.load_twitch("following")
+        elif kind == "browse" and "browse" not in self.loaded and self.client:
+            self.load_twitch("browse")
         p = self.pane(kind)
         (p.query_one(Input) if kind == "search" and not p.rows else p.table).focus()
 
     def action_tab(self, kind):
         self.query_one(TabbedContent).active = kind
 
+    def action_toggle(self, platform):
+        if platform not in self.platforms: return
+        self.platform_on ^= {platform}
+        for k in TABS:
+            self.pane(k).render_rows()
+        self.update_bar()
+
     def action_refresh(self):
         if self.demo:
             self.notify(t("Demo mode: nothing to refresh."), timeout=2)
             return
-        if not self.client:
-            self.action_login()
-            return
-        self.load(self.current if self.current != "search" else "live")
+        self.load_live()
+        if self.current == "following" and self.client and "twitch" in self.platforms:
+            self.load_twitch("following")
+        elif self.current == "browse" and self.client:
+            self.load_twitch("browse")
 
     def action_filter(self):
         self.pane(self.current).query_one(Input).focus()
@@ -454,12 +578,12 @@ class OpenLive(App):
         r = self.selected()
         if not r: return
         if not r["live"]:
-            player.open_web(r["login"])
+            if not self.demo: player.open_web(r)
             return
         if self.demo:
             self.notify(t("Demo mode: would open {name} in your player.", name=r["name"]), timeout=3)
             return
-        ok, why = player.play(r["login"], r["title"])
+        ok, why = player.play(r, r["title"])
         if ok:
             self.notify(t("Opening {name}…", name=r["name"]), timeout=3)
         elif why == "no-streamlink":
@@ -469,43 +593,90 @@ class OpenLive(App):
                         severity="error", timeout=8)
 
     def action_web(self):
-        if (r := self.selected()) and not self.demo: player.open_web(r["login"])
+        if (r := self.selected()) and not self.demo: player.open_web(r)
 
     def action_chat(self):
-        if (r := self.selected()) and not self.demo: player.open_chat(r["login"])
+        if (r := self.selected()) and not self.demo: player.open_chat(r)
 
     def action_fav(self):
         r = self.selected()
         if not r: return
-        self.favs ^= {r["login"]}
+        self.favs ^= {channels.row_key(r)}
         if not self.demo: config.save_favourites(self.favs)
         for k in TABS:
             self.pane(k).render_rows()
+
+    def action_add(self):
+        if isinstance(self.screen, onboard.AddChannelScreen): return
+        r = self.selected()
+        self.push_screen(onboard.AddChannelScreen(self.platforms if not self.demo else channels.ALL,
+                                                  r.get("platform") if r else None), self._after_add)
+
+    def _after_add(self, added):
+        if added and not self.demo:
+            self.load_live()
+
+    def action_remove(self):
+        r = self.selected()
+        if not r or r.get("platform") not in channels.LISTED: return
+        if self.demo:
+            self.notify(t("Demo mode: nothing to remove."), timeout=2)
+            return
+        lists = channels.load()
+        if channels.remove(lists, r["platform"], r["login"]):
+            channels.save(lists)
+            self.src[r["platform"]] = [x for x in self.src[r["platform"]] if x["login"] != r["login"]]
+            self.rebuild()
+            self.update_bar()
+            self.notify(t("Removed {name} from your {platform} list.", name=r["name"], platform=channels.LABEL[r["platform"]]), timeout=3)
+
+    def action_platforms(self, first_run=False):
+        if self.demo or isinstance(self.screen, onboard.PlatformsScreen): return
+        self.push_screen(onboard.PlatformsScreen(self.platforms or ["twitch"], first_run), self._after_platforms)
+
+    def _after_platforms(self, chosen):
+        if not chosen:
+            return
+        first = not self.platforms
+        self.platforms = chosen
+        self.platform_on = set(chosen)
+        config.save_platforms(chosen)
+        self.rebuild()
+        self.update_bar()
+        if first:
+            self.start()
+        else:
+            self.load_live()
 
     def action_login(self):
         if self.demo or isinstance(self.screen, onboard.LoginScreen): return
         self.push_screen(onboard.LoginScreen(), self._after_login)
 
     def _after_login(self, rec):
-        if not rec:
-            self.update_bar()
-            return
-        self.auth, self.client = rec, twitch.Client(rec)
-        self.loaded.clear()
-        self.notify(t("Signed in as {login}", login=rec["login"]), timeout=3)
+        if rec:
+            self.auth, self.client = rec, twitch.Client(rec)
+            self.loaded.discard("browse")
+            self.src["twitch_follow"] = None
+            self.notify(t("Signed in as {login}", login=rec["login"]), timeout=3)
+            if "twitch" not in self.platforms:
+                self._after_platforms([*self.platforms, "twitch"])
+            self.load_twitch("live")
+            if self.current == "following":
+                self.load_twitch("following")
         self.update_bar()
-        self.load("live")
-        if self.current in ("following", "browse"):
-            self.load(self.current)
+        if any(p in self.platforms and not channels.load()[p] for p in channels.LISTED):
+            self.call_after_refresh(self.action_add)
 
     def action_logout(self):
         if self.demo: return
         twitch.logout()
-        config.delete(CACHE)
         self.auth, self.client = None, None
-        self.loaded.clear()
-        for k in TABS:
+        self.src.update(twitch=[], twitch_follow=None)
+        self.loaded.discard("browse")
+        self._save_cache()
+        for k in TWITCH_ONLY:
             self.pane(k).set_rows([])
+        self.rebuild()
         self.update_bar()
 
 
