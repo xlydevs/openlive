@@ -267,7 +267,7 @@ class AddChannelScreen(ModalScreen):
 
     def __init__(self, platforms, platform=None):
         super().__init__()
-        self.platforms = [p for p in channels.LISTED if p in platforms] or list(channels.LISTED)
+        self.platforms = [p for p in channels.LISTED if p in platforms] or ["kick"]
         self.platform = platform if platform in self.platforms else self.platforms[0]
         self.added = 0
         self.results = []
@@ -291,6 +291,7 @@ class AddChannelScreen(ModalScreen):
                 yield Button(t("Add"), id="add", variant="primary")
 
     def on_mount(self):
+        self.query_one("#add-platform").display = len(self.platforms) > 1
         self._sync()
         self.query_one("#add-input").focus()
 

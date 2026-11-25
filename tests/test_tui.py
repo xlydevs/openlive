@@ -129,3 +129,16 @@ async def test_first_run_youtube_offers_google_sign_in(tmp_path, monkeypatch):
         await pilot.press("escape")  # skip: then it asks for channels by hand
         await pilot.pause(0.3)
         assert isinstance(app.screen, onboard.AddChannelScreen)
+
+
+async def test_add_dialog_hides_youtube_when_signed_in_to_google():
+    from openlive import onboard
+    from openlive.tui import make_app
+    app = make_app(True)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        app.gauth = {"name": "Me"}
+        await pilot.press("a")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, onboard.AddChannelScreen)
+        assert app.screen.platforms == ["kick"] and not app.screen.query_one("#add-platform").display

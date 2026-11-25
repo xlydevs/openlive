@@ -648,8 +648,12 @@ class OpenLive(App):
     def action_add(self):
         if isinstance(self.screen, onboard.AddChannelScreen): return
         r = self.selected()
-        self.push_screen(onboard.AddChannelScreen(self.platforms if not self.demo else channels.ALL,
-                                                  r.get("platform") if r else None), self._after_add)
+        plats = [p for p in (self.platforms if not self.demo else channels.ALL)
+                 if p in channels.LISTED and not (p == "youtube" and self.gauth)]  # signed in: YouTube comes from Google
+        if not plats:
+            self.notify(t("Your YouTube channels come from your Google subscriptions."))
+            return
+        self.push_screen(onboard.AddChannelScreen(plats, r.get("platform") if r else None), self._after_add)
 
     def _after_add(self, added):
         if added and not self.demo:

@@ -172,5 +172,6 @@ ES = {
     "YouTube: sign in · g": "YouTube: inicia sesión · g",
     "Sign in with Google (g) to bring your subscriptions, or add channels here.": "Inicia sesión con Google (g) para traer tus suscripciones, o añade canales aquí.",
     "live only; sign in with Google for your subscriptions": "solo directos; inicia sesión con Google para tus suscripciones",
+    "Your YouTube channels come from your Google subscriptions.": "Tus canales de YouTube salen de tus suscripciones de Google.",
     "That channel comes from your YouTube subscriptions.": "Ese canal viene de tus suscripciones de YouTube.",
 }
