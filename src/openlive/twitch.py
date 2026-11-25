@@ -163,6 +163,16 @@ class Client:
             out += self.get("streams", {"user_login": logins[i:i + 100], "first": 100}).get("data", [])
         return out
 
+    def current_vod(self, user_id, started_at):
+        """URL of the video Twitch is recording of the stream that is live now, or None (VODs off or sub-only)."""
+        from .common import parse_time
+        start = parse_time(started_at)
+        vids = self.get("videos", {"user_id": user_id, "type": "archive", "first": 1}).get("data", [])
+        if not vids or not start or vids[0].get("viewable", "public") != "public":
+            return None
+        made = parse_time(vids[0].get("created_at", ""))
+        return vids[0].get("url") if made and abs((made - start).total_seconds()) < 600 else None
+
     def search(self, query, limit=50):
         r = self.get("search/channels", {"query": query, "first": min(100, limit)})
         return r.get("data", [])
@@ -171,6 +181,7 @@ class Client:
 def norm_stream(s):
     """Helix stream → the row dict the UI uses."""
     return {"platform": "twitch", "login": s.get("user_login", ""), "name": s.get("user_name") or s.get("user_login", ""),
+            "user_id": s.get("user_id", ""),
             "game": s.get("game_name", ""), "viewers": int(s.get("viewer_count") or 0), "title": s.get("title", ""),
             "started_at": s.get("started_at", ""), "language": s.get("language", ""), "tags": s.get("tags") or [],
             "live": True}
@@ -178,7 +189,7 @@ def norm_stream(s):
 
 def norm_search(c):
     return {"platform": "twitch", "login": c.get("broadcaster_login", ""), "name": c.get("display_name") or c.get("broadcaster_login", ""),
-            "game": c.get("game_name", ""), "viewers": 0, "title": c.get("title", ""),
+            "user_id": c.get("id", ""), "game": c.get("game_name", ""), "viewers": 0, "title": c.get("title", ""),
             "started_at": c.get("started_at", "") if c.get("is_live") else "", "language": c.get("broadcaster_language", ""),
             "tags": c.get("tags") or [], "live": bool(c.get("is_live"))}
 

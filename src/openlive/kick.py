@@ -70,6 +70,15 @@ def resolve(text):
 
 
 SEARCH = "https://kick.com/api/search?searched_word={q}"
+VIDEOS = "https://kick.com/api/v2/channels/{slug}/videos"
+
+
+def current_vod(slug):
+    """HLS URL of the recording Kick keeps of the stream that is live now (it can be seeked), or None."""
+    vids = net.fetch_json(VIDEOS.format(slug=slug))
+    if isinstance(vids, list) and vids and vids[0].get("is_live") and str(vids[0].get("source", "")).startswith("https://"):
+        return vids[0]["source"]
+    return None
 
 
 def search(query, limit=8):
