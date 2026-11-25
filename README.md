@@ -74,7 +74,8 @@ openlive --lang es     interface language (default: system locale)
 
 **In the player (mpv):**
 - `←`/`→` 10 seconds back or forward, `Shift+←`/`Shift+→` 5 minutes.
-- `End` (or `l`) back to live. The buttons at the bottom do the same.
+- `End` (or `l`) back to live, `c` show or hide the chat, `Space` pause.
+- Move the mouse for the control bar: click the timeline to jump, `● −5:03` to return to live.
 
 **YouTube without signing in:** in [Google Takeout](https://takeout.google.com/takeout/custom/youtube) pick only YouTube → subscriptions, export, unzip, and paste the path of `subscriptions.csv` in the `a` dialog.
 
@@ -98,7 +99,7 @@ Kick has no public way for an app like this to read who you follow, so openlive 
 | Twitch | rewind | Helix `videos`: the recording Twitch keeps of the live stream, which grows as it goes on |
 | Kick | rewind | `kick.com/api/v2/channels/<slug>/videos`: its recording of the live stream |
 | YouTube | rewind | yt-dlp: the separate video and audio playlists keep the channel's DVR window (up to ~1 h) |
-| All | playback | mpv with openlive's own setup ([uosc](https://github.com/tomasklaen/uosc) interface and a small rewind script); other players through `streamlink` |
+| All | playback | mpv with openlive's own setup (its control bar, chat sidebar and rewind script, in `src/openlive/mpv/`); other players through `streamlink` |
 
 **Honest note:** Kick's channel API and YouTube's `/live` page are not official, documented APIs. They work today and need no keys, but either site can change them and break the check until openlive is updated. With a [YouTube Data API key](https://console.cloud.google.com/apis/library/youtube.googleapis.com) (`[youtube] api_key` in the config, free quota is plenty) YouTube uses the official API instead.
 
@@ -119,9 +120,11 @@ On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OP
 
 **Rewinding:** Twitch needs the streamer to keep past broadcasts (most do; sub-only ones can't be opened). YouTube rewinds only on channels with DVR on. Without either, mpv can still go back to the moment you opened the stream. `player_ui = "plain"` uses your own mpv setup instead, without rewind.
 
+**Chat:** a read-only Twitch chat sidebar in mpv (`c` hides it), read anonymously from Twitch's chat server. Writing in the chat, and the chat for Kick and YouTube, aren't there yet. Emoji are left out because mpv's text renderer can't draw them.
+
 **Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
 
-**Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). The first time you play with mpv, openlive downloads uosc once from its GitHub release and checks it against a fixed hash. No analytics.
+**Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). No analytics.
 
 ## Development
 

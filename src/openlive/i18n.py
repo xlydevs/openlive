@@ -159,12 +159,13 @@ ES = {
     "added": "añadido",
     "{name} is already on your list.": "{name} ya está en tu lista.",
     # player
-    "Back 10 s": "Atrás 10 s",
-    "Forward 10 s": "Adelante 10 s",
-    "Back to live": "Volver al directo",
+    "LIVE": "EN DIRECTO",
+    "hide": "ocultar",
+    "Connecting to the chat…": "Conectando con el chat…",
+    "Nobody has written yet.": "Todavía no ha escrito nadie.",
+    "Can't reach the chat, retrying…": "No se puede conectar con el chat, reintentando…",
     "Going back…": "Retrocediendo…",
     "This stream can't go back further.": "Este directo no deja retroceder más.",
-    "← → 10 s · Shift ← → 5 min · End back to live": "← → 10 s · Mayús ← → 5 min · Fin vuelve al directo",
     # google
     "Sign in with Google": "Inicia sesión con Google",
     "For your YouTube subscriptions. openlive only asks to read them: it can't comment, subscribe or change anything.": "Para tus suscripciones de YouTube. openlive solo pide leerlas: no puede comentar, suscribirse ni cambiar nada.",

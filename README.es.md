@@ -74,7 +74,8 @@ openlive --lang en     idioma de la interfaz (por defecto: el del sistema)
 
 **En el reproductor (mpv):**
 - `←`/`→` 10 segundos atrás o adelante, `Mayús+←`/`Mayús+→` 5 minutos.
-- `Fin` (o `l`) vuelve al directo. Los botones de abajo hacen lo mismo.
+- `Fin` (o `l`) vuelve al directo, `c` muestra u oculta el chat, `Espacio` pausa.
+- Mueve el ratón para ver la barra de controles: clic en la línea de tiempo para saltar, en `● −5:03` para volver al directo.
 
 **YouTube sin iniciar sesión:** en [Google Takeout](https://takeout.google.com/takeout/custom/youtube) marca solo YouTube → suscripciones, exporta, descomprime y pega la ruta de `subscriptions.csv` en el diálogo de `a`.
 
@@ -98,7 +99,7 @@ Kick no ofrece una forma pública de que una app así lea a quién sigues, así 
 | Twitch | rebobinar | Helix `videos`: la grabación que Twitch hace del directo, que crece mientras emite |
 | Kick | rebobinar | `kick.com/api/v2/channels/<slug>/videos`: su grabación del directo |
 | YouTube | rebobinar | yt-dlp: las listas separadas de vídeo y audio guardan la ventana DVR del canal (hasta ~1 h) |
-| Todas | reproducción | mpv con la configuración propia de openlive (interfaz [uosc](https://github.com/tomasklaen/uosc) y un pequeño script para rebobinar); otros reproductores con `streamlink` |
+| Todas | reproducción | mpv con la configuración propia de openlive (su barra de controles, el chat lateral y el script para rebobinar, en `src/openlive/mpv/`); otros reproductores con `streamlink` |
 
 **Aviso sincero:** la API de canales de Kick y la página `/live` de YouTube no son APIs oficiales ni documentadas. Hoy funcionan y no piden claves, pero cualquiera de las dos webs puede cambiarlas y romper la comprobación hasta que se actualice openlive. Con una [clave de la API de datos de YouTube](https://console.cloud.google.com/apis/library/youtube.googleapis.com) (`[youtube] api_key` en la configuración; la cuota gratuita sobra) YouTube usa la API oficial.
 
@@ -119,9 +120,11 @@ En Windows están en `%APPDATA%\openlive` y `%LOCALAPPDATA%\openlive`. `$OPENLIV
 
 **Rebobinar:** en Twitch el streamer tiene que guardar sus directos (casi todos lo hacen; los que son solo para suscriptores no se pueden abrir). En YouTube solo se puede en canales con DVR. Si no, mpv puede volver igualmente hasta el momento en que abriste el directo. `player_ui = "plain"` usa tu propia configuración de mpv, sin rebobinar.
 
+**Chat:** una barra lateral con el chat de Twitch en mpv, solo para leer (`c` la oculta), leído de forma anónima del servidor de chat de Twitch. Todavía no se puede escribir, ni hay chat de Kick y YouTube. Los emojis se quitan porque el motor de texto de mpv no sabe dibujarlos.
+
 **No incluye:** chat dentro de la terminal; VODs de directos pasados, clips ni vídeos normales de YouTube; Explorar y Buscar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
 
-**Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick, YouTube y Google (para iniciar sesión). La primera vez que reproduces con mpv, openlive descarga uosc una sola vez desde su versión publicada en GitHub y lo comprueba con un hash fijo. Sin analíticas.
+**Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick, YouTube y Google (para iniciar sesión). Sin analíticas.
 
 ## Desarrollo
 

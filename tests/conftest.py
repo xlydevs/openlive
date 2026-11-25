@@ -19,7 +19,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(twitch, "_request", no_network)
     monkeypatch.setattr(google, "_request", no_network)
     monkeypatch.setattr(net, "fetch", no_network)
-    for name in ("_install_uosc", "_direct_url", "_youtube_hls"):
+    for name in ("_direct_url", "_youtube_hls"):
         monkeypatch.setattr(player, name, no_network)
     i18n.set_lang("en")
     yield tmp_path

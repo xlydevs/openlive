@@ -13,6 +13,6 @@ First public version, rewritten from a personal shell script.
 - Kick / YouTube channel lists you keep in openlive (a adds, x removes); import YouTube subscriptions from Google Takeout.
 - Sign in with Google (a code, like Twitch) to bring your YouTube subscriptions; RSS + cheap API checks keep quota low.
 - Kick channel search as you type in the add dialog.
-- Rewind live streams in mpv, even to before you opened them (Twitch and Kick to the stream start, YouTube up to ~1 h with DVR); End returns to live. openlive runs mpv with its own setup and the uosc interface.
+- Rewind live streams in mpv, even to before you opened them (Twitch and Kick to the stream start, YouTube up to ~1 h with DVR); End returns to live. openlive runs mpv with its own setup: a control bar in openlive's colours and a read-only Twitch chat sidebar (c hides it).
 - First-run platform picker (p to change it later). Optional YouTube Data API key.
 - English and Spanish.

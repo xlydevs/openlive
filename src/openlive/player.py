@@ -1,23 +1,19 @@
 """Open a stream in the user's own video player.
 
-With mpv, openlive uses its own mpv setup (in the data dir, the user's mpv.conf is left alone): the uosc
-interface and a small script that rewinds the live stream, even to before you opened it, and jumps back to live.
+With mpv, openlive uses its own mpv setup (in the data dir, the user's mpv.conf is left alone): its own control
+bar, a Twitch chat sidebar, and a script that rewinds the live stream, even to before you opened it.
   Twitch   plays the recording Twitch keeps of the live stream; it grows as the stream goes on.
   Kick     plays live; going back switches to Kick's recording of the stream.
   YouTube  plays live; going back reloads it earlier, as far as the channel's DVR window allows (up to ~1 h).
 Other players (IINA, VLC) get the stream through streamlink as before.
 """
-import hashlib
-import io
 import json
 import os
 import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import webbrowser
-import zipfile
 from importlib import resources
 from pathlib import Path
 
@@ -33,13 +29,11 @@ PLAYERS = {
 DEFAULT_ARGS = {"mpv": "--force-window=immediate --cache=yes", "iina": "--keep-running", "vlc": ""}
 
 
-UOSC_VERSION = "5.13.0"
-UOSC_URL = f"https://github.com/tomasklaen/uosc/releases/download/{UOSC_VERSION}/uosc.zip"
-UOSC_SHA256 = "4be9da3289285300fa374496c3f1bfd7bb20ac08e890d25bd5a06b28eebe4882"
-
 MPV_CONF = """# written by openlive on every start; your own ~/.config/mpv is not used for openlive's streams
 osc=no
 osd-bar=no
+osd-font="Helvetica Neue,Segoe UI,Noto Sans,sans-serif"
+background-color="#0f1420"
 force-window=immediate
 keep-open=yes
 cache=yes
@@ -48,57 +42,24 @@ demuxer-max-back-bytes={back}MiB
 demuxer-readahead-secs=60
 hls-bitrate=max
 """
-UOSC_CONTROLS = ("menu,gap,command:replay_10:script-binding openlive/back?{back},"
-                 "command:forward_10:script-binding openlive/forward?{fwd},gap,<stream>stream-quality,space,"
-                 "command:radio_button_checked:script-binding openlive/live?{live},gap,fullscreen")
-UOSC_CONF = "# written by openlive\ncontrols=" + UOSC_CONTROLS + "\ntimeline_persistency=paused\n"
-
-
 def mpv_dir():
     return config.DATA / "mpv"
 
 
-def _install_uosc(d):
-    """Download the pinned uosc release once (checked against its hash) into openlive's mpv dir."""
-    req = urllib.request.Request(UOSC_URL, headers={"User-Agent": net.UA})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        blob = r.read()
-    if hashlib.sha256(blob).hexdigest() != UOSC_SHA256:
-        raise OSError("uosc download doesn't match its checksum")
-    with zipfile.ZipFile(io.BytesIO(blob)) as z:
-        for name in z.namelist():
-            target = (d / name).resolve()
-            if not name.startswith(("scripts/", "fonts/")) or d.resolve() not in target.parents:
-                continue
-            if name.endswith("/"):
-                target.mkdir(parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(z.read(name))
-                if "/bin/" in name:
-                    target.chmod(0o755)
-    (d / "scripts" / "uosc" / ".openlive-version").write_text(UOSC_VERSION)
-
-
 def prepare_mpv():
-    """openlive's mpv config dir, (re)written each time. uosc is optional: without it mpv's own OSC is used."""
+    """openlive's mpv config dir, (re)written each time."""
     d = mpv_dir()
     (d / "scripts").mkdir(parents=True, exist_ok=True)
     (d / "script-opts").mkdir(exist_ok=True)
     mb = max(64, int(config.get("rewind_cache_mb", 1024) or 0))
     conf = MPV_CONF.format(ahead=min(mb, 400), back=mb)
-    ver = d / "scripts" / "uosc" / ".openlive-version"
-    if config.get("player_ui", "openlive") == "openlive" and not (ver.exists() and ver.read_text() == UOSC_VERSION):
-        try:
-            _install_uosc(d)
-        except (OSError, zipfile.BadZipFile, ValueError):
-            pass
-    if not (d / "scripts" / "uosc" / "main.lua").exists():
-        conf = conf.replace("osc=no\nosd-bar=no\n", "")
     (d / "mpv.conf").write_text(conf)
-    (d / "script-opts" / "uosc.conf").write_text(UOSC_CONF.format(back=t("Back 10 s"), fwd=t("Forward 10 s"), live=t("Back to live")))
-    (d / "scripts" / "openlive.lua").write_text(resources.files("openlive").joinpath("mpv/openlive.lua").read_text())
-    for old in d.glob("session-*.json"):  # left behind if mpv never started
+    shutil.rmtree(d / "scripts" / "uosc", ignore_errors=True)  # earlier versions used uosc
+    shutil.rmtree(d / "fonts", ignore_errors=True)
+    (d / "script-opts" / "uosc.conf").unlink(missing_ok=True)
+    for name in ("openlive.lua", "openlive_ui.lua"):
+        (d / "scripts" / name).write_text(resources.files("openlive").joinpath(f"mpv/{name}").read_text(encoding="utf-8"), encoding="utf-8")
+    for old in [*d.glob("session-*.json"), *d.glob("ipc-*")]:  # left behind if mpv never started
         if time.time() - old.stat().st_mtime > 86400:
             old.unlink(missing_ok=True)
     return d
@@ -246,16 +207,31 @@ def session_for(r, client=None, quality="best"):
 
 
 def _session_file(d, sess):
-    sess["text"] = {"hint": t("← → 10 s · Shift ← → 5 min · End back to live"), "live": t("Live"),
-                    "rewind": t("Going back…"), "no_more": t("This stream can't go back further.")}
+    sess["text"] = {"live": t("LIVE"), "rewind": t("Going back…"), "no_more": t("This stream can't go back further."),
+                    "chat": t("Chat"), "hide": t("hide"), "chat_connecting": t("Connecting to the chat…"),
+                    "chat_quiet": t("Nobody has written yet."), "chat_offline": t("Can't reach the chat, retrying…")}
     path = d / f"session-{os.getpid()}-{time.time_ns()}.json"
     path.write_text(json.dumps(sess))
     return path
 
 
-def mpv_command(ppath, sess, title):
+def _ipc_path(d):
+    name = f"ipc-{os.getpid()}-{time.time_ns() % 10**9}"
+    return rf"\\.\pipe\openlive-{name}" if config.WIN else str(d / name)
+
+
+def _with_ui(sess, target, title):
+    """Add what the interface shows: channel, title, and the Twitch chat (only Twitch for now)."""
+    sess.update(channel=target.get("name", ""), title=title or "", chat_on=bool(config.get("chat", True)),
+                chat=target.get("login", "") if target.get("platform", "twitch") == "twitch" else "")
+    return sess
+
+
+def mpv_command(ppath, sess, title, ipc=None):
     d = prepare_mpv()
     cmd = [ppath, f"--config-dir={d}", f"--script-opts=openlive-session={_session_file(d, sess)}"]
+    if ipc:
+        cmd.append(f"--input-ipc-server={ipc}")
     if title:
         cmd += [f"--force-media-title={title}", f"--title={title}"]
     if sess.get("start"):
@@ -268,29 +244,34 @@ def mpv_command(ppath, sess, title):
 
 
 def command_for(target, title="", client=None):
-    """The command to run for this stream, picking openlive's mpv with rewind when it can."""
+    """(command, chat bridge command or None) for this stream, picking openlive's mpv with rewind when it can."""
     pname, ppath = find_player()
     name = target if isinstance(target, str) else target.get("name", "")
     full = f"{name} · {title}" if title else name
     if pname != "mpv" or config.get("player_ui", "openlive") == "plain" or isinstance(target, str):
-        return build_command(target, title)
+        return build_command(target, title), None
     sess = None
     if config.get("rewind", True):
         try:
             sess = session_for(target, client, config.get("quality", "best"))
         except Exception:  # any platform hiccup: play it the plain way
             sess = None
-    if sess:
-        return mpv_command(ppath, sess, full)
+    sess = _with_ui(sess or {"platform": target.get("platform", "twitch"), "mode": "pipe"}, target, title)
     d = prepare_mpv()
-    sp = _session_file(d, {"platform": target.get("platform", "twitch"), "mode": "pipe"})
-    return build_command(target, title, extra_args=f'"--config-dir={d}" "--script-opts=openlive-session={sp}"')
+    ipc = _ipc_path(d) if sess["chat"] else None
+    bridge = [sys.executable, "-m", "openlive.chat", ipc, sess["chat"]] if ipc else None
+    if sess["mode"] != "pipe":
+        return mpv_command(ppath, sess, full, ipc), bridge
+    extra = f'"--config-dir={d}" "--script-opts=openlive-session={_session_file(d, sess)}"'
+    if ipc:
+        extra += f' "--input-ipc-server={ipc}"'
+    return build_command(target, title, extra_args=extra), bridge
 
 
 def play(target, title="", client=None):
     """Start the player detached. target: Twitch login or a row. Returns (ok, message_key). Can block a few
     seconds (it asks the platform for the stream address), so call it from a worker thread."""
-    cmd = command_for(target, title, client)
+    cmd, bridge = command_for(target, title, client)
     if cmd is None:
         return False, "no-player" if streamlink_cmd() else "no-streamlink"
     log = None
@@ -300,6 +281,8 @@ def play(target, title="", client=None):
     kw = {"creationflags": 0x00000008} if config.WIN else {"start_new_session": True}  # DETACHED_PROCESS
     try:
         subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL, stderr=subprocess.STDOUT, **kw)
+        if bridge:  # waits for mpv's socket, ends when mpv closes
+            subprocess.Popen(bridge, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log or subprocess.DEVNULL, **kw)
     except OSError:
         return False, "no-player"
     finally:

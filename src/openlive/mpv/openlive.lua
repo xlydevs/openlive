@@ -30,6 +30,15 @@ local lag = tonumber(s.lag) or 15      -- Kick: how far behind live its recordin
 
 local function say(text) if text then mp.osd_message(text, 2.5) end end
 
+-- the interface script (openlive_ui.lua) reads the session and the current mode from here
+local function publish()
+    mp.set_property_native("user-data/openlive", {
+        platform = s.platform or "", mode = mode, lag = lag, title = s.title or "", channel = s.channel or "",
+        chat = s.chat or "", chat_on = s.chat_on ~= false, text = T,
+    })
+end
+publish()
+
 -- seconds that can be rewound inside mpv's own cache
 local function cached_back()
     local st = mp.get_property_native("demuxer-cache-state")
@@ -45,6 +54,7 @@ local function load(url, start, lavf, new_mode)
     mp.set_property("start", start or "none")
     mp.set_property("demuxer-lavf-o", lavf or "")
     mode = new_mode
+    publish()
     mp.commandv("loadfile", url, "replace")
 end
 
@@ -104,10 +114,3 @@ mp.add_forced_key_binding("Shift+LEFT", "back-more", function() back(300) end)
 mp.add_forced_key_binding("Shift+RIGHT", "forward-more", function() forward(300) end)
 mp.add_forced_key_binding("END", "live", go_live)
 mp.add_forced_key_binding("l", "live-l", go_live)
-
-mp.register_event("file-loaded", function()
-    if T.hint and not s.hinted then
-        s.hinted = true
-        say(T.hint)
-    end
-end)
