@@ -16,3 +16,13 @@
 # Use your own Twitch app instead of openlive's (create a "Public" app at
 # https://dev.twitch.tv/console/apps/create, redirect http://localhost)
 # client_id = "your-client-id"
+
+# Platforms shown (chosen on first run; change them with p in the app)
+# [platforms]
+# enabled = ["twitch", "kick", "youtube"]
+
+# YouTube: optional Data API key. Without it openlive reads each channel's /live page.
+# With it, the check is one cheap API call. Enable "YouTube Data API v3" at
+# https://console.cloud.google.com/apis/library/youtube.googleapis.com and create a key.
+# [youtube]
+# api_key = "your-key"

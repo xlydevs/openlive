@@ -16,7 +16,7 @@ Type "clear && COLORTERM=truecolor openlive --demo --lang en" Enter
 Sleep 3s
 Show
 
-# Live: who you follow is on now, favourites on top
+# Live: Twitch, Kick and YouTube together, favourites on top
 Sleep 3s
 Down Sleep 0.8s
 Down Sleep 0.8s
@@ -27,8 +27,16 @@ Type "f" Sleep 2s
 Type "/" Sleep 0.5s
 Type "chess" Sleep 2.5s
 Escape Sleep 1.5s
-# sort by viewers, then back
-Sleep 1s
+# hide Kick and YouTube for a moment, then bring them back
+Type "k" Sleep 1.5s
+Type "y" Sleep 2s
+Type "k" Sleep 0.6s
+Type "y" Sleep 1.5s
+
+# add a Kick or YouTube channel (no sign-in)
+Type "a" Sleep 2s
+Type "kick.com/emberfox" Sleep 2s
+Escape Sleep 1.2s
 
 # Following: everyone you follow, live first
 Type "2" Sleep 3s

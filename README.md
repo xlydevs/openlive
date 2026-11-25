@@ -1,8 +1,8 @@
 # openlive
 
-**Who you follow is live right now?** `openlive` is a terminal dashboard of the Twitch channels you follow that are streaming at this moment. Pick one and it plays in your own video player (mpv, IINA or VLC), not in a browser tab.
+**Who you watch is live right now?** `openlive` is a terminal dashboard of the Twitch, Kick and YouTube channels you watch that are streaming at this moment. Pick one and it plays in your own video player (mpv, IINA or VLC), not in a browser tab.
 
-It runs on your computer and talks only to Twitch. Signing in takes a code, not keys: you open twitch.tv/activate, check the code and press Activate.
+It runs on your computer and talks only to those sites. Twitch sign-in takes a code, not keys: you open twitch.tv/activate, check the code and press Activate. Kick and YouTube need no account at all.
 
 [Español](README.es.md)
 
@@ -10,17 +10,19 @@ It runs on your computer and talks only to Twitch. Signing in takes a code, not 
 
 ## Features
 
-- **Live first.** The channels you follow that are live, with category, viewers, uptime and title. It refreshes on its own every minute.
-- **Watch without the browser.** `Enter` opens the stream through streamlink in mpv, IINA or VLC, with low latency. `o` opens the channel on Twitch, `c` pops out its chat.
-- **Following, Browse and Search.** Everyone you follow (live first), the top streams on Twitch, and a search for any channel or game.
+- **Live first, every platform in one list.** The channels you watch that are live, with category, viewers, uptime and title, tagged `TW`, `KI` or `YT`. It refreshes on its own every minute.
+- **Watch without the browser.** `Enter` opens the stream through streamlink in mpv, IINA or VLC. `o` opens the channel in the browser, `c` pops out its chat.
+- **Twitch follows, no keys.** Sign in once with a code; your follows come from your account. No developer account, no Client ID, no secret to copy.
+- **Kick and YouTube lists.** Add channels by name or link with `a`, remove them with `x`. Import your YouTube subscriptions from Google Takeout. YouTube shows live streams only, never videos.
+- **Show or hide a platform.** Click its chip in the top bar, or press `t`, `k` or `y`.
+- **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and a search for any Twitch channel or game.
 - **Favourites on top.** `f` pins a channel to the top of every list.
-- **Sign in once, no keys.** No developer account, no Client ID, no secret to copy. The token is stored only on your computer and refreshes itself.
 - **Mouse and keyboard.** Click a header to sort, `/` to filter. Works from 80 columns up.
 - **English and Spanish.**
 
-| Following | Browse |
+| Following | Add Kick / YouTube channels |
 |---|---|
-| ![Following](docs/screenshots/following.svg) | ![Browse](docs/screenshots/browse.svg) |
+| ![Following](docs/screenshots/following.svg) | ![Add channels](docs/screenshots/add-channels.svg) |
 
 ## Install
 
@@ -33,7 +35,9 @@ openlive
 
 On macOS, `brew install mpv` gets you a player.
 
-Try it without a Twitch account. The demo uses made-up channels and reads and writes nothing:
+The first time, openlive asks which platforms you watch. Twitch then asks you to sign in; Kick and YouTube ask for a few channels.
+
+Try it without any account. The demo uses made-up channels and reads and writes nothing:
 
 ```bash
 openlive --demo
@@ -50,49 +54,58 @@ uv venv && uv pip install -e ".[dev]"
 ## Usage
 
 ```text
-openlive               open the dashboard (asks you to sign in the first time)
-openlive <channel>     watch a channel right away
+openlive               open the dashboard (first run: pick platforms, sign in)
+openlive <channel>     watch a Twitch channel right away
 openlive --text        print who is live and exit (also used when piping: openlive | less)
-openlive --login       sign in from the terminal, without the dashboard
-openlive --logout      sign out and delete the saved token
+openlive --login       sign in to Twitch from the terminal, without the dashboard
+openlive --logout      sign out of Twitch and delete the saved token
 openlive --demo        made-up channels
 openlive --lang es     interface language (default: system locale)
 ```
 
 **Keys:**
 - `1`–`4` switch tabs: Live, Following, Browse, Search.
-- `↑`/`↓` move, `Enter` watch (offline channels open on Twitch).
-- `o` open on Twitch, `c` chat, `f` favourite.
+- `↑`/`↓` move, `Enter` watch (offline channels open in the browser).
+- `o` open in the browser, `c` chat, `f` favourite.
+- `a` add Kick / YouTube channels, `x` remove the selected one from your list.
+- `t`, `k`, `y` show or hide Twitch, Kick, YouTube; `p` choose platforms.
 - `/` filter the list (in Search: type a channel or game and press `Enter`), `Esc` clear it.
-- `r` refresh, `l` sign in, `Ctrl+P` command palette (sign out is there), `q` quit.
+- `r` refresh, `l` sign in to Twitch, `Ctrl+P` command palette (sign out is there), `q` quit.
 - Click a column header to sort; click again to reverse.
+
+**YouTube subscriptions:** in [Google Takeout](https://takeout.google.com/takeout/custom/youtube) pick only YouTube → subscriptions, export, unzip, and paste the path of `subscriptions.csv` in the `a` dialog.
 
 ## How it works
 
-openlive signs in with Twitch's [device code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow). It asks for one permission, `user:read:follows`, so it can read who you follow and nothing else. It can't chat, follow or change anything on your account.
+Twitch uses its [device code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#device-code-grant-flow) and asks for one permission, `user:read:follows`, so it can read who you follow and nothing else. It can't chat, follow or change anything on your account.
 
-| What | Where it comes from |
-|---|---|
-| Live tab | Helix `streams/followed` |
-| Following tab | Helix `channels/followed` plus who is live |
-| Browse tab | Helix `streams` (top by viewers; `browse_language` filters it) |
-| Search tab | Helix `search/channels` |
-| Playback | `streamlink https://twitch.tv/<channel> best --player <yours>` |
+Kick and YouTube have no public way for an app like this to read who you follow, so openlive keeps its own list of channels and checks each one.
+
+| Platform | What | Where it comes from |
+|---|---|---|
+| Twitch | Live, Following | Helix `streams/followed`, `channels/followed` |
+| Twitch | Browse, Search | Helix `streams` (top by viewers; `browse_language` filters it), `search/channels` |
+| Kick | live check | `kick.com/api/v2/channels/<slug>` (public, no key) |
+| YouTube | live check | the channel's `/live` page, or with an API key: RSS feed + `videos.list` |
+| All | playback | `streamlink <url> best --player <yours>` |
+
+**Honest note:** Kick's channel API and YouTube's `/live` page are not official, documented APIs. They work today and need no keys, but either site can change them and break the check until openlive is updated. With a [YouTube Data API key](https://console.cloud.google.com/apis/library/youtube.googleapis.com) (`[youtube] api_key` in the config, free quota is plenty) YouTube uses the official API instead.
 
 Files it keeps:
 
 | File | What |
 |---|---|
-| `~/.config/openlive/config.toml` | optional settings: player, quality, language… see [config.example.toml](config.example.toml) |
-| `~/.local/share/openlive/auth.json` | your sign-in token (only readable by you) |
+| `~/.config/openlive/config.toml` | optional settings: platforms, player, quality, language, YouTube key… see [config.example.toml](config.example.toml) |
+| `~/.local/share/openlive/auth.json` | your Twitch sign-in token (only readable by you) |
+| `~/.local/share/openlive/channels.json` | your Kick and YouTube channels |
 | `~/.local/share/openlive/favourites.json` | your favourites |
 | `~/.local/share/openlive/cache.json` | last Live list, so the app opens instantly |
 
 On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OPENLIVE_CONFIG` and `$OPENLIVE_DATA_DIR` override them.
 
-**Not supported:** chat inside the terminal, VODs and clips, other platforms (YouTube, Kick). Ads and sub-only streams behave as they do in streamlink.
+**Not supported:** chat inside the terminal, VODs, clips and regular YouTube videos, Browse and Search on Kick or YouTube (no public API for it), `openlive <channel>` for Kick or YouTube. Ads and sub-only streams behave as they do in streamlink.
 
-**Privacy:** nothing is sent anywhere but Twitch. No analytics.
+**Privacy:** nothing is sent anywhere but Twitch, Kick and YouTube. No analytics.
 
 ## Development
 
@@ -106,7 +119,7 @@ vhs scripts/demo.tape                     # docs/demo.gif
 
 Using your own Twitch app: create a **Public** app at [dev.twitch.tv](https://dev.twitch.tv/console/apps/create) (redirect `http://localhost`), then set `client_id` in the config or `$OPENLIVE_CLIENT_ID`.
 
-openlive is not affiliated with or endorsed by Twitch.
+openlive is not affiliated with or endorsed by Twitch, Kick or YouTube.
 
 ## License
 

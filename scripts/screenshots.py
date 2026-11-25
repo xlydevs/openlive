@@ -35,6 +35,7 @@ async def main():
     await shoot("en", ["4", "slash", *"lantern", "enter"], "search")
     await shoot("es", ["down"], "live-es")
     await shoot("en", ["down"], "narrow", size=(80, 24))
+    await shoot("en", ["a"], "add-channels")
 
 
 asyncio.run(main())
