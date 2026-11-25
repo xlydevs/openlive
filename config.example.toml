@@ -1,0 +1,18 @@
+# openlive config: ~/.config/openlive/config.toml (Windows: %APPDATA%\openlive\config.toml)
+# Everything is optional.
+
+# lang = "es"                 # en | es (default: your locale)
+# refresh = 60                # seconds between automatic refreshes (min 15)
+
+# Video player. Default: the first one found of mpv, IINA, VLC.
+# player = "mpv"              # mpv | iina | vlc | or a full path to the executable
+# player_args = "--force-window=immediate --cache=yes"
+# quality = "best"            # streamlink quality: best, 1080p60, 720p60, 480p, audio_only…
+# low_latency = true
+
+# Browse tab: only streams in this language (ISO 639-1 code)
+# browse_language = "es"
+
+# Use your own Twitch app instead of openlive's (create a "Public" app at
+# https://dev.twitch.tv/console/apps/create, redirect http://localhost)
+# client_id = "your-client-id"
