@@ -27,7 +27,8 @@ def test_device_login_and_refresh(monkeypatch):
     assert google.poll_device_login("dc") is None
     rec = google.finish_login(google.poll_device_login("dc"))
     assert rec["name"] == "My Channel" and google.load_auth()["refresh_token"] == "rt"
-    assert (config.DATA / google.AUTH_FILE).stat().st_mode & 0o777 == 0o600
+    if not config.WIN:  # Windows has no Unix permissions
+        assert (config.DATA / google.AUTH_FILE).stat().st_mode & 0o777 == 0o600
     rec["expires_at"] = int(time.time()) - 1
     assert google.token(rec) == "at2" and google.load_auth()["refresh_token"] == "rt"
 
