@@ -18,7 +18,8 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 - **Kick search as you type.** `a`, type a few letters, pick the channel. Kick doesn't share who you follow, so openlive keeps that list.
 - **Show or hide a platform.** Click its chip in the top bar, or press `t`, `k` or `y`.
 - **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and one search across Twitch, Kick and YouTube, with a section per platform.
-- **Chat next to the video.** A Twitch chat sidebar in mpv with emoji and Twitch emotes. Scroll back with the mouse wheel (the chat waits for you and counts new messages), pause it, and write with `Enter`.
+- **A player that looks like openlive.** mpv with its own control bar: vector icons, a volume slider (remembered between streams), a live pill that takes you back, tooltips and a timeline you can drag.
+- **Chat next to the video.** A Twitch chat sidebar in mpv, closed until you open it, with emoji and Twitch emotes. Scroll back with the mouse wheel (the chat waits for you and counts new messages), pause it, and write with `Enter`.
 - **Settings tab.** Sign in and out, your Kick channels, rewind or live only, chat on or off, player, quality and language (`5`).
 - **Favourites on top.** `f` pins a channel to the top of every list.
 - **Mouse and keyboard.** Click a header to sort, `/` to filter. Works from 80 columns up.
@@ -76,7 +77,8 @@ openlive --lang es     interface language (default: system locale)
 
 **In the player (mpv):**
 - `←`/`→` 10 seconds back or forward, `Shift+←`/`Shift+→` 5 minutes.
-- `End` (or `l`) back to live, `c` show or hide the chat, `Space` pause.
+- `End` (or `l`) back to live, `Space` pause, `↑`/`↓` volume, `m` mute, `f` full screen.
+- `c` opens or closes the chat (it starts closed; Settings can open it on start).
 - Chat: mouse wheel or `PgUp`/`PgDn` to scroll back, the pause button to stop it, `Enter` (or **Write**) to write.
 - Move the mouse for the control bar: click the timeline to jump, `● −5:03` to return to live.
 
@@ -127,7 +129,7 @@ On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OP
 
 **Rewinding:** Twitch needs the streamer to keep past broadcasts (most do; sub-only ones can't be opened). YouTube rewinds only on channels with DVR on. Without either, mpv can still go back to the moment you opened the stream. `player_ui = "plain"` uses your own mpv setup instead, without rewind.
 
-**Chat:** a Twitch chat sidebar in mpv (`c` hides it). openlive draws it as an image (with Pillow) because mpv's own text renderer can't show colour emoji. It keeps the last 2000 messages. Joined emoji (👩‍💻) show their first part, and 7TV/BTTV emotes show as text. There's no chat for Kick and YouTube yet. Writing needs mpv 0.38 or newer.
+**Chat:** a Twitch chat sidebar in mpv (`c` opens it). openlive draws it as an image (with Pillow) because mpv's own text renderer can't show colour emoji. It keeps the last 2000 messages. Joined emoji (👩‍💻) show their first part, and 7TV/BTTV emotes show as text. There's no chat for Kick and YouTube yet. Writing needs mpv 0.38 or newer.
 
 **Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
 

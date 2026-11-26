@@ -18,7 +18,8 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 - **Kick: buscas mientras escribes.** `a`, unas letras y eliges el canal. Kick no dice a quién sigues, así que openlive guarda esa lista.
 - **Muestra u oculta una plataforma.** Haz clic en su etiqueta de la barra superior o pulsa `t`, `k` o `y`.
 - **Siguiendo, Explorar y Buscar.** Todos los que ves (primero los que están en directo), los directos más vistos de Twitch y una sola búsqueda en Twitch, Kick y YouTube, con una sección por plataforma.
-- **El chat junto al vídeo.** Una barra lateral con el chat de Twitch en mpv, con emojis y emotes de Twitch. Con la rueda del ratón vuelves atrás (el chat te espera y cuenta los mensajes nuevos), puedes pausarlo y escribes con `Enter`.
+- **Un reproductor con el estilo de openlive.** mpv con su propia barra: iconos vectoriales, barra de volumen (se recuerda entre directos), una pastilla de directo que te devuelve a él, tooltips y una línea de tiempo que puedes arrastrar.
+- **El chat junto al vídeo.** Una barra lateral con el chat de Twitch en mpv, cerrada hasta que la abres, con emojis y emotes de Twitch. Con la rueda del ratón vuelves atrás (el chat te espera y cuenta los mensajes nuevos), puedes pausarlo y escribes con `Enter`.
 - **Pestaña de Ajustes.** Iniciar y cerrar sesión, tus canales de Kick, rebobinar o solo directo, chat sí o no, reproductor, calidad e idioma (`5`).
 - **Favoritos arriba.** `f` fija un canal arriba en todas las listas.
 - **Ratón y teclado.** Clic en una cabecera para ordenar, `/` para filtrar. Funciona desde 80 columnas.
@@ -76,7 +77,8 @@ openlive --lang en     idioma de la interfaz (por defecto: el del sistema)
 
 **En el reproductor (mpv):**
 - `←`/`→` 10 segundos atrás o adelante, `Mayús+←`/`Mayús+→` 5 minutos.
-- `Fin` (o `l`) vuelve al directo, `c` muestra u oculta el chat, `Espacio` pausa.
+- `Fin` (o `l`) vuelve al directo, `Espacio` pausa, `↑`/`↓` volumen, `m` silencio, `f` pantalla completa.
+- `c` abre o cierra el chat (empieza cerrado; en Ajustes puedes hacer que se abra al empezar).
 - Chat: rueda del ratón o `RePág`/`AvPág` para ver mensajes anteriores, el botón de pausa para pararlo, `Enter` (o **Escribir**) para escribir.
 - Mueve el ratón para ver la barra de controles: clic en la línea de tiempo para saltar, en `● −5:03` para volver al directo.
 
@@ -127,7 +129,7 @@ En Windows están en `%APPDATA%\openlive` y `%LOCALAPPDATA%\openlive`. `$OPENLIV
 
 **Rebobinar:** en Twitch el streamer tiene que guardar sus directos (casi todos lo hacen; los que son solo para suscriptores no se pueden abrir). En YouTube solo se puede en canales con DVR. Si no, mpv puede volver igualmente hasta el momento en que abriste el directo. `player_ui = "plain"` usa tu propia configuración de mpv, sin rebobinar.
 
-**Chat:** una barra lateral con el chat de Twitch en mpv (`c` la oculta). openlive la dibuja como imagen (con Pillow) porque el motor de texto de mpv no sabe mostrar emojis en color. Guarda los últimos 2000 mensajes. Los emojis compuestos (👩‍💻) muestran solo su primera parte y los emotes de 7TV/BTTV salen como texto. Todavía no hay chat de Kick ni de YouTube. Para escribir hace falta mpv 0.38 o más nuevo.
+**Chat:** una barra lateral con el chat de Twitch en mpv (`c` la abre). openlive la dibuja como imagen (con Pillow) porque el motor de texto de mpv no sabe mostrar emojis en color. Guarda los últimos 2000 mensajes. Los emojis compuestos (👩‍💻) muestran solo su primera parte y los emotes de 7TV/BTTV salen como texto. Todavía no hay chat de Kick ni de YouTube. Para escribir hace falta mpv 0.38 o más nuevo.
 
 **No incluye:** chat dentro de la terminal; VODs de directos pasados, clips ni vídeos normales de YouTube; Explorar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
 
