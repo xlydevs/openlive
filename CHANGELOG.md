@@ -18,6 +18,7 @@ First public version, rewritten from a personal shell script.
 - Search covers Twitch, Kick and YouTube at once, one section per platform, and works without a Twitch sign-in.
 - New player look: vector icons, volume slider (↑/↓, remembered), live pill, tooltips, draggable timeline, full-screen button. The chat starts closed; c or its button opens it.
 - No player yet? openlive offers to install mpv (brew, winget, or the Linux line to copy), finds it in the usual Windows folders, and warns once about an mpv older than 0.38.
+- One-line installers for macOS/Linux (install.sh) and Windows (install.ps1): uv, openlive and mpv, nothing needed first.
 - Settings tab (5): accounts, Kick channels, rewind, chat, one player per streamer, player, quality, language.
 - One click on a row opens it (Textual needed a second click on the same cell); a streamer already playing isn't opened twice unless you turn that off in Settings.
 - First-run platform picker (p to change it later). Optional YouTube Data API key.

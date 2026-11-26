@@ -33,14 +33,31 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 
 ## Install
 
-You need Python 3.11+ and a video player: [mpv](https://mpv.io) (recommended), [IINA](https://iina.io) on macOS, or [VLC](https://www.videolan.org/vlc/). streamlink is installed with openlive.
+You don't need Python or anything else first. Open a terminal and paste one line.
+
+**macOS and Linux** (Terminal):
 
 ```bash
-pipx install openlive        # or: uv tool install openlive
+curl -LsSf https://raw.githubusercontent.com/xlydevs/openlive/main/install.sh | sh
+```
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/xlydevs/openlive/main/install.ps1 | iex
+```
+
+It installs [uv](https://docs.astral.sh/uv/) (one small program that brings its own Python), then openlive, then the [mpv](https://mpv.io) player if it's missing (Homebrew on macOS, winget on Windows, your package manager on Linux). Then open a new terminal and run:
+
+```bash
 openlive
 ```
 
-If there's no player yet, openlive offers to install mpv the first time you open a stream (Homebrew on macOS, winget on Windows; on Linux it shows the `sudo apt/dnf/pacman` line to run). It also looks for mpv where Windows installers put it, and says once if your mpv is too old to write in the chat (0.38+).
+To update, paste the same line again. To remove it: `uv tool uninstall openlive`. You can read both scripts first: [install.sh](install.sh), [install.ps1](install.ps1).
+
+Already have uv or pipx? `uv tool install "openlive @ https://github.com/xlydevs/openlive/archive/refs/heads/main.tar.gz"` does the same (Python 3.11+). IINA and VLC work too, without rewind and chat.
+
+If there's still no player, openlive offers to install mpv the first time you open a stream (Homebrew on macOS, winget on Windows; on Linux it shows the `sudo apt/dnf/pacman` line to run). It also looks for mpv where Windows installers put it, and says once if your mpv is too old to write in the chat (0.38+).
 
 The first time, openlive asks which platforms you watch. Twitch and YouTube then ask you to sign in with a code; Kick asks for a few channels.
 

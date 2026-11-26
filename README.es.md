@@ -33,14 +33,31 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 
 ## Instalación
 
-Necesitas Python 3.11+ y un reproductor: [mpv](https://mpv.io) (recomendado), [IINA](https://iina.io) en macOS o [VLC](https://www.videolan.org/vlc/). streamlink se instala con openlive.
+No necesitas tener Python ni nada instalado. Abre una terminal y pega una línea.
+
+**macOS y Linux** (Terminal):
 
 ```bash
-pipx install openlive        # o: uv tool install openlive
+curl -LsSf https://raw.githubusercontent.com/xlydevs/openlive/main/install.sh | sh
+```
+
+**Windows** (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/xlydevs/openlive/main/install.ps1 | iex
+```
+
+Instala [uv](https://docs.astral.sh/uv/) (un programa pequeño que trae su propio Python), después openlive y, si falta, el reproductor [mpv](https://mpv.io) (con Homebrew en macOS, winget en Windows y tu gestor de paquetes en Linux). Luego abre una terminal nueva y ejecuta:
+
+```bash
 openlive
 ```
 
-Si aún no tienes reproductor, openlive se ofrece a instalar mpv la primera vez que abres un directo (con Homebrew en macOS y winget en Windows; en Linux te enseña la línea `sudo apt/dnf/pacman` que debes ejecutar). También busca mpv donde lo dejan los instaladores de Windows y avisa una vez si tu mpv es demasiado antiguo para escribir en el chat (0.38+).
+Para actualizar, pega la misma línea otra vez. Para quitarlo: `uv tool uninstall openlive`. Puedes leer antes los dos scripts: [install.sh](install.sh), [install.ps1](install.ps1).
+
+¿Ya tienes uv o pipx? `uv tool install "openlive @ https://github.com/xlydevs/openlive/archive/refs/heads/main.tar.gz"` hace lo mismo (Python 3.11+). IINA y VLC también funcionan, sin rebobinado ni chat.
+
+Si aun así no tienes reproductor, openlive se ofrece a instalar mpv la primera vez que abres un directo (con Homebrew en macOS y winget en Windows; en Linux te enseña la línea `sudo apt/dnf/pacman` que debes ejecutar). También busca mpv donde lo dejan los instaladores de Windows y avisa una vez si tu mpv es demasiado antiguo para escribir en el chat (0.38+).
 
 La primera vez, openlive te pregunta qué plataformas ves. Después Twitch y YouTube te piden iniciar sesión con un código, y Kick te pide algunos canales.
 
