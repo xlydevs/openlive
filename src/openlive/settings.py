@@ -37,7 +37,7 @@ CSS = """
 .-narrow #kick-list { margin-left: 0; }
 """
 
-PLAYERS = [("Automatic", ""), ("mpv", "mpv"), ("IINA", "iina"), ("VLC", "vlc")]
+PLAYERS = [("mpv (recommended)", ""), ("IINA", "iina"), ("VLC", "vlc")]
 QUALITIES = ["best", "1080p60", "720p60", "720p", "480p", "360p", "audio_only"]
 
 
@@ -82,9 +82,10 @@ class SettingsPane(VerticalScroll):
                 yield Switch(value=bool(config.get("one_per_channel", True)), id="set-one")
             with Horizontal(classes="set-row"):
                 yield Static(t("Video player"), classes="set-name")
-                yield Static("", classes="set-value")
+                yield Static(t("IINA and VLC play the stream without rewind or chat."), classes="set-value")
                 cur = config.get("player") or ""
-                opts = [(t(n) if not v else n, v) for n, v in PLAYERS]
+                cur = "" if cur == "mpv" else cur
+                opts = [(t(n), v) for n, v in PLAYERS]
                 if cur and cur not in [v for _, v in PLAYERS]:
                     opts.append((cur, cur))
                 yield Select(opts, value=cur, allow_blank=False, id="set-player")

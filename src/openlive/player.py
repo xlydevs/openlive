@@ -79,9 +79,9 @@ def prepare_mpv():
 
 
 def find_player(name=None):
-    """(name, path) of the configured player, or the first one installed. (None, None) if none."""
+    """(name, path) of the configured player (mpv unless another one is chosen). (None, None) if it isn't installed."""
     want = name or config.get("player")
-    names = [want] if want else list(PLAYERS)
+    names = [want] if want else ["mpv"]  # other players only when chosen in Settings: mpv has rewind and chat
     for n in names:
         if n and (os.sep in n or "/" in n) and Path(n).exists():
             return Path(n).stem.lower(), n
