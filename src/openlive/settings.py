@@ -74,8 +74,8 @@ class SettingsPane(VerticalScroll):
                 yield Switch(value=bool(config.get("rewind", True)), id="set-rewind")
             with Horizontal(classes="set-row"):
                 yield Static(t("Chat"), classes="set-name")
-                yield Static(t("chat sidebar next to the video (c hides it)"), classes="set-value")
-                yield Switch(value=bool(config.get("chat", True)), id="set-chat")
+                yield Static(t("open the chat sidebar when a stream starts (c toggles it)"), classes="set-value")
+                yield Switch(value=bool(config.get("chat_open", False)), id="set-chat")
             with Horizontal(classes="set-row"):
                 yield Static(t("Video player"), classes="set-name")
                 yield Static("", classes="set-value")
@@ -149,8 +149,8 @@ class SettingsPane(VerticalScroll):
         self.sync()
 
     def on_switch_changed(self, event):
-        key = {"set-rewind": "rewind", "set-chat": "chat"}.get(event.switch.id)
-        if key and bool(event.value) != bool(config.get(key, True)):
+        key, default = {"set-rewind": ("rewind", True), "set-chat": ("chat_open", False)}.get(event.switch.id, (None, None))
+        if key and bool(event.value) != bool(config.get(key, default)):
             config.save_setting(key, bool(event.value))
 
     def on_select_changed(self, event):

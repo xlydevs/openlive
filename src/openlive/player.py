@@ -213,7 +213,10 @@ def _session_file(d, sess):
                     "write": t("Write"), "say": t("Say"), "paused": t("Chat paused"), "new_msgs": t("{n} new messages"),
                     "chat_signin": t("To write, sign in to Twitch in openlive (press l there)."),
                     "chat_rescope": t("To write, sign in to Twitch again in openlive (press l there)."),
-                    "chat_not_sent": t("Not sent: {why}"), "chat_no_input": t("Writing needs mpv 0.38 or newer.")}
+                    "chat_not_sent": t("Not sent: {why}"), "chat_no_input": t("Writing needs mpv 0.38 or newer."),
+                    "play": t("Play"), "pause": t("Pause"), "back10": t("Back 10 s"), "fwd10": t("Forward 10 s"),
+                    "mute": t("Mute"), "unmute": t("Unmute"), "go_live": t("Go live"), "loading": t("Loading…"),
+                    "fullscreen": t("Full screen"), "open_chat": t("Open chat"), "close_chat": t("Close chat")}
     path = d / f"session-{os.getpid()}-{time.time_ns()}.json"
     path.write_text(json.dumps(sess))
     return path
@@ -226,7 +229,7 @@ def _ipc_path(d):
 
 def _with_ui(sess, target, title):
     """Add what the interface shows: channel, title, and the Twitch chat (only Twitch for now)."""
-    sess.update(channel=target.get("name", ""), title=title or "", chat_on=bool(config.get("chat", True)),
+    sess.update(channel=target.get("name", ""), title=title or "", chat_on=bool(config.get("chat_open", False)),
                 chat=target.get("login", "") if target.get("platform", "twitch") == "twitch" else "",
                 chat_id=target.get("user_id", ""))
     return sess
