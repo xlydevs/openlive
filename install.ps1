@@ -20,7 +20,7 @@ if (-not (Have "uv")) {
 
 # 2. openlive
 Say "Installing openlive..."
-uv tool install --force --python 3.12 "openlive @ $src"
+uv tool install --force --python 3.12 --refresh-package openlive --reinstall-package openlive "openlive @ $src"
 if ($LASTEXITCODE -ne 0) { Warn "openlive couldn't be installed (see the message above)."; return }
 try { uv tool update-shell *> $null } catch { }
 

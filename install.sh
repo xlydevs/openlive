@@ -26,7 +26,7 @@ fi
 
 # 2. openlive
 say "Installing openlive…"
-uv tool install --force --python 3.12 "openlive @ $SRC"
+uv tool install --force --python 3.12 --refresh-package openlive --reinstall-package openlive "openlive @ $SRC"
 uv tool update-shell >/dev/null 2>&1 || true
 
 # 3. mpv, the video player openlive sets up for rewind and chat
