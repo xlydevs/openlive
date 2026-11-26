@@ -38,7 +38,7 @@ pipx install openlive        # o: uv tool install openlive
 openlive
 ```
 
-En macOS, `brew install mpv` te da un reproductor.
+Si aún no tienes reproductor, openlive se ofrece a instalar mpv la primera vez que abres un directo (con Homebrew en macOS y winget en Windows; en Linux te enseña la línea `sudo apt/dnf/pacman` que debes ejecutar). También busca mpv donde lo dejan los instaladores de Windows y avisa una vez si tu mpv es demasiado antiguo para escribir en el chat (0.38+).
 
 La primera vez, openlive te pregunta qué plataformas ves. Después Twitch y YouTube te piden iniciar sesión con un código, y Kick te pide algunos canales.
 

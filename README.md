@@ -38,7 +38,7 @@ pipx install openlive        # or: uv tool install openlive
 openlive
 ```
 
-On macOS, `brew install mpv` gets you a player.
+If there's no player yet, openlive offers to install mpv the first time you open a stream (Homebrew on macOS, winget on Windows; on Linux it shows the `sudo apt/dnf/pacman` line to run). It also looks for mpv where Windows installers put it, and says once if your mpv is too old to write in the chat (0.38+).
 
 The first time, openlive asks which platforms you watch. Twitch and YouTube then ask you to sign in with a code; Kick asks for a few channels.
 
