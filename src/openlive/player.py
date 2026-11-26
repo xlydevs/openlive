@@ -276,6 +276,26 @@ def command_for(target, title="", client=None):
     return build_command(target, title, extra_args=extra), bridge
 
 
+RUNNING = {}  # channel key → the player process openlive started for it
+
+
+def channel_key(target):
+    """'platform:channel' for a row or a Twitch login, so the same streamer is recognised on any tab."""
+    if isinstance(target, str):
+        return f"twitch:{target.lower()}"
+    ch = target.get("login") or target.get("channel_id") or target.get("name") or ""
+    return f"{target.get('platform', 'twitch')}:{str(ch).lower()}"
+
+
+def is_open(target):
+    """True while a player openlive started for this streamer is still running."""
+    proc = RUNNING.get(channel_key(target))
+    if proc is not None and proc.poll() is None:
+        return True
+    RUNNING.pop(channel_key(target), None)
+    return False
+
+
 def play(target, title="", client=None):
     """Start the player detached. target: Twitch login or a row. Returns (ok, message_key). Can block a few
     seconds (it asks the platform for the stream address), so call it from a worker thread."""
@@ -288,7 +308,8 @@ def play(target, title="", client=None):
         log = open(config.DATA / "player.log", "ab")  # noqa: SIM115 (handed to the child)
     kw = {"creationflags": 0x00000008} if config.WIN else {"start_new_session": True}  # DETACHED_PROCESS
     try:
-        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL, stderr=subprocess.STDOUT, **kw)
+        RUNNING[channel_key(target)] = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL,
+                                                        stderr=subprocess.STDOUT, **kw)
         if bridge:  # waits for mpv's socket, ends when mpv closes
             subprocess.Popen(bridge, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log or subprocess.DEVNULL, **kw)
     except OSError:

@@ -193,3 +193,38 @@ async def test_search_groups_platforms_in_sections(monkeypatch):
         assert [r.get("viewers") for r in p.shown if r.get("platform") == "youtube"] == [30, 3]  # live, most viewers first
         p.table.move_cursor(row=0)
         assert p.selected() is None  # a header is not a channel
+
+
+async def test_one_click_opens_once_per_streamer(monkeypatch):
+    config.OFFLINE = True
+    from openlive import player
+    from openlive.tui import make_app
+    app = make_app(demo_mode=True)
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause(0.2)
+        app.demo = False
+        started = []
+        monkeypatch.setattr(app, "open_player", lambda r: started.append(player.channel_key(r)))
+        live = app.pane("live")
+        await pilot.click("#table-live", offset=(40, 2))   # a row that isn't selected yet: one click opens it
+        await pilot.pause(0.1)
+        await pilot.click("#table-live", offset=(80, 2))   # same row, another column, while it is still starting
+        await pilot.pause(0.1)
+        first = player.channel_key(live.shown[1])
+        assert started == [first]
+        app.opening.clear()
+
+        class Running:
+            def poll(self): return None
+        monkeypatch.setitem(player.RUNNING, first, Running())
+        await pilot.click("#table-live", offset=(40, 2))   # already playing: not opened again
+        await pilot.pause(0.1)
+        assert started == [first]
+        config.CONFIG["one_per_channel"] = False           # the setting allows it
+        await pilot.click("#table-live", offset=(40, 2))
+        await pilot.pause(0.1)
+        assert started == [first, first]
+        config.CONFIG.pop("one_per_channel")
+        await pilot.click("#table-live", offset=(40, 0))   # header click sorts, never opens
+        await pilot.pause(0.1)
+        assert len(started) == 2

@@ -9,6 +9,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical
+from textual.coordinate import Coordinate
 from textual.theme import Theme
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
@@ -108,6 +109,21 @@ class Chip(Static):
         self.app.action_toggle(self.platform)
 
 
+class StreamTable(DataTable):
+    """A DataTable where one click on a row opens it. Textual's own table only opens on a second click on the
+    exact same cell, so a click on another column of the selected row did nothing, and people clicked again."""
+
+    async def _on_click(self, event: events.Click) -> None:
+        meta = event.style.meta
+        before = self.cursor_coordinate
+        await super()._on_click(event)
+        row, col = meta.get("row"), meta.get("column")
+        if row is None or col is None or row < 0 or col < 0:
+            return  # header, row label or empty space
+        if Coordinate(row, col) != before:  # Textual already sent RowSelected when it was the same cell
+            self._post_selected_message()
+
+
 class StreamPane(Vertical):
     """A filter/search line, the table of channels and a detail line for the selected one."""
 
@@ -122,7 +138,7 @@ class StreamPane(Vertical):
         ph = t("search channels and games on Twitch, Kick and YouTube, then Enter") if self.kind == "search" else t("filter by channel, game or title")
         yield Input(placeholder="/ " + ph, classes="filter", id=f"filter-{self.kind}")
         yield Static("", classes="empty", id=f"empty-{self.kind}")
-        yield DataTable(id=f"table-{self.kind}", cursor_type="row", zebra_stripes=True)
+        yield StreamTable(id=f"table-{self.kind}", cursor_type="row", zebra_stripes=True)
         yield Static("", classes="detail", id=f"detail-{self.kind}")
 
     @property
@@ -340,6 +356,7 @@ class OpenLive(App):
         self.client = None
         self.gauth = None
         self.skipped = set()   # setup steps already offered this session
+        self.opening = set()   # channel keys whose player is starting right now
         self.yt_at = 0.0       # last YouTube check (signed in: every few minutes, it costs API quota)
         self.favs = {"lunacodes", "kick:emberfox"} if demo_mode else config.favourites()
         self.platforms = list(channels.ALL) if demo_mode else (config.enabled_platforms() or [])
@@ -712,12 +729,22 @@ class OpenLive(App):
         if self.demo:
             self.notify(t("Demo mode: would open {name} in your player.", name=r["name"]), timeout=3)
             return
+        key = player.channel_key(r)
+        if key in self.opening:
+            return  # still starting from a click a moment ago
+        if config.get("one_per_channel", True) and player.is_open(r):
+            self.notify(t("{name} is already open in your player.", name=r["name"]), timeout=4)
+            return
+        self.opening.add(key)
         self.notify(t("Opening {name}… the player takes a few seconds to appear.", name=r["name"]), timeout=6)
         self.open_player(r)
 
     @work(thread=True, group="player")
     def open_player(self, r):
-        ok, why = player.play(r, r["title"], self.client)
+        try:
+            ok, why = player.play(r, r["title"], self.client)
+        finally:
+            self.call_from_thread(self.opening.discard, player.channel_key(r))
         if not ok:
             self.call_from_thread(self._player_failed, why)
 

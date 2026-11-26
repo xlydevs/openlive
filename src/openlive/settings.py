@@ -77,6 +77,10 @@ class SettingsPane(VerticalScroll):
                 yield Static(t("open the chat sidebar when a stream starts (c toggles it)"), classes="set-value")
                 yield Switch(value=bool(config.get("chat_open", False)), id="set-chat")
             with Horizontal(classes="set-row"):
+                yield Static(t("One per streamer"), classes="set-name")
+                yield Static(t("don't open a second player for a streamer already playing"), classes="set-value")
+                yield Switch(value=bool(config.get("one_per_channel", True)), id="set-one")
+            with Horizontal(classes="set-row"):
                 yield Static(t("Video player"), classes="set-name")
                 yield Static("", classes="set-value")
                 cur = config.get("player") or ""
@@ -149,7 +153,8 @@ class SettingsPane(VerticalScroll):
         self.sync()
 
     def on_switch_changed(self, event):
-        key, default = {"set-rewind": ("rewind", True), "set-chat": ("chat_open", False)}.get(event.switch.id, (None, None))
+        key, default = {"set-rewind": ("rewind", True), "set-chat": ("chat_open", False),
+                        "set-one": ("one_per_channel", True)}.get(event.switch.id, (None, None))
         if key and bool(event.value) != bool(config.get(key, default)):
             config.save_setting(key, bool(event.value))
 

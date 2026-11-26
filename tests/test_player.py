@@ -105,3 +105,13 @@ def test_chat_sender_posts_to_helix_and_explains_missing_permission(monkeypatch)
     assert chat.Sender("x", "1").ready() == "rescope"  # signed in before writing was possible
     monkeypatch.setattr(twitch, "load_auth", lambda: None)
     assert chat.Sender("x", "1").ready() == "signin"
+
+
+def test_channel_key_matches_rows_and_logins(monkeypatch):
+    assert player.channel_key("SomeOne") == player.channel_key({"platform": "twitch", "login": "someone"})
+    assert player.channel_key({"platform": "kick", "login": "a"}) != player.channel_key({"platform": "twitch", "login": "a"})
+
+    class Done:
+        def poll(self): return 0
+    monkeypatch.setitem(player.RUNNING, "twitch:gone", Done())
+    assert not player.is_open("gone") and "twitch:gone" not in player.RUNNING
