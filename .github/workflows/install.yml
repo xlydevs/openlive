@@ -1,0 +1,35 @@
+name: Installers
+
+# Runs install.sh / install.ps1 on clean machines, the way a new user would, and checks openlive starts.
+on:
+  push:
+    branches: [main]
+    paths: ["install.sh", "install.ps1", ".github/workflows/install.yml", "pyproject.toml"]
+  workflow_dispatch:
+
+jobs:
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh install.sh
+      - run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          openlive -V
+          openlive --demo --text | head -3
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: powershell
+        run: .\install.ps1
+      - shell: powershell
+        run: |
+          $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+          openlive -V
+          openlive --demo --text | Select-Object -First 3
