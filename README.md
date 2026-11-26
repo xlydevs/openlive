@@ -20,7 +20,7 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 - **Following, Browse and Search.** Everyone you watch (live first), the top streams on Twitch, and one search across Twitch, Kick and YouTube, with a section per platform.
 - **A player that looks like openlive.** mpv with its own control bar: vector icons, a volume slider (remembered between streams), a live pill that takes you back, tooltips and a timeline you can drag.
 - **Chat next to the video.** A Twitch chat sidebar in mpv, closed until you open it, with emoji and Twitch emotes. Scroll back with the mouse wheel (the chat waits for you and counts new messages), pause it, and write with `Enter`.
-- **Settings tab.** Sign in and out, your Kick channels, rewind or live only, chat on or off, player, quality and language (`5`).
+- **Settings tab.** Sign in and out, your Kick channels, rewind or live only, open the chat on start, one player per streamer, player, quality and language (`5`).
 - **Favourites on top.** `f` pins a channel to the top of every list.
 - **Mouse and keyboard.** Click a header to sort, `/` to filter. Works from 80 columns up.
 - **English and Spanish.**

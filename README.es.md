@@ -20,7 +20,7 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 - **Siguiendo, Explorar y Buscar.** Todos los que ves (primero los que están en directo), los directos más vistos de Twitch y una sola búsqueda en Twitch, Kick y YouTube, con una sección por plataforma.
 - **Un reproductor con el estilo de openlive.** mpv con su propia barra: iconos vectoriales, barra de volumen (se recuerda entre directos), una pastilla de directo que te devuelve a él, tooltips y una línea de tiempo que puedes arrastrar.
 - **El chat junto al vídeo.** Una barra lateral con el chat de Twitch en mpv, cerrada hasta que la abres, con emojis y emotes de Twitch. Con la rueda del ratón vuelves atrás (el chat te espera y cuenta los mensajes nuevos), puedes pausarlo y escribes con `Enter`.
-- **Pestaña de Ajustes.** Iniciar y cerrar sesión, tus canales de Kick, rebobinar o solo directo, chat sí o no, reproductor, calidad e idioma (`5`).
+- **Pestaña de Ajustes.** Iniciar y cerrar sesión, tus canales de Kick, rebobinar o solo directo, abrir el chat al empezar, un reproductor por streamer, reproductor, calidad e idioma (`5`).
 - **Favoritos arriba.** `f` fija un canal arriba en todas las listas.
 - **Ratón y teclado.** Clic en una cabecera para ordenar, `/` para filtrar. Funciona desde 80 columnas.
 - **Inglés y español.**
