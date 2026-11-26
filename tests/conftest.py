@@ -1,6 +1,6 @@
 import pytest
 
-from openlive import chat, config, google, i18n, net, player, twitch, youtube
+from openlive import chat, config, google, i18n, net, player, twitch, updater, youtube
 
 
 @pytest.fixture(autouse=True)
@@ -23,5 +23,6 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(chat, "_helix", no_network)
     for name in ("_direct_url", "_youtube_hls"):
         monkeypatch.setattr(player, name, no_network)
+    monkeypatch.setattr(updater, "latest", lambda force=False: None)
     i18n.set_lang("en")
     yield tmp_path

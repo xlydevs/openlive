@@ -250,3 +250,29 @@ async def test_missing_player_offers_install_then_plays(monkeypatch):
         await pilot.click("#install")
         await pilot.pause(0.5)
         assert not isinstance(app.screen, onboard.PlayerSetupScreen) and reopened == [r["login"]]
+
+
+async def test_update_dialog_updates_in_background(monkeypatch):
+    config.OFFLINE = True
+    from openlive import updater
+    from openlive.tui import make_app
+    monkeypatch.setattr(updater, "can_update", lambda: True)
+    monkeypatch.setattr(updater, "update", lambda: "done")
+    app = make_app(demo_mode=True)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.2)
+        app._update_found("9.9.9")
+        await pilot.pause(0.1)
+        assert isinstance(app.screen, onboard.UpdateScreen)
+        await pilot.click("#update")
+        await pilot.pause(0.3)
+        assert app.update_state == "done"
+        app.update_state, app.new_version = None, None
+        app._update_found("9.9.10")
+        await pilot.pause(0.1)
+        await pilot.press("escape")  # later: not asked again for this version
+        await pilot.pause(0.1)
+        assert config.CONFIG.get("update_skipped") == "9.9.10"
+        app._update_found("9.9.10")
+        await pilot.pause(0.1)
+        assert not isinstance(app.screen, onboard.UpdateScreen)

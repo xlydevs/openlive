@@ -13,12 +13,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, OptionList, Select, SelectionList, Static
 from textual.widgets.option_list import Option
 
-from . import channels, config, demo, google, kick, net, player, twitch, youtube
+from . import __version__, channels, config, demo, google, kick, net, player, twitch, updater, youtube
 from .common import human
 from .i18n import t
 
 CSS = """
-LoginScreen, PlatformsScreen, AddChannelScreen, PlayerSetupScreen { align: center middle; background: #0f1420 70%; }
+LoginScreen, PlatformsScreen, AddChannelScreen, PlayerSetupScreen, UpdateScreen { align: center middle; background: #0f1420 70%; }
 #platforms { height: auto; background: #141b2a; border: none; padding: 0; }
 #platforms:focus { background-tint: transparent; }
 #platforms > .selection-list--button { color: #1a2335; background: #1a2335; }
@@ -41,8 +41,9 @@ LoginScreen, PlatformsScreen, AddChannelScreen, PlayerSetupScreen { align: cente
 #code { width: 100%; height: 3; content-align: center middle; text-style: bold; color: #0f1420; background: #f2cc8f; margin: 1 0; }
 #url { color: #9cc8e8; text-align: center; }
 #login-status { color: #7c879f; margin-top: 1; }
-#install-cmd { width: 100%; height: 3; content-align: center middle; color: #eef2fa; background: #0f1420; border: round #263044; margin: 1 0 0 0; }
+#install-cmd { width: 100%; height: auto; min-height: 3; padding: 0 1; content-align: center middle; text-align: center; color: #eef2fa; background: #0f1420; border: round #263044; margin: 1 0 0 0; }
 #install-status { color: #7c879f; margin-top: 1; height: auto; }
+#login-dialog { width: 88; }
 .buttons { height: auto; align-horizontal: right; margin-top: 1; }
 .buttons Button { margin-left: 2; }
 """
@@ -114,7 +115,7 @@ class _Google:
 class LoginScreen(ModalScreen):
     """Sign in with a code (Twitch or Google). Dismisses with the saved auth record, or None when cancelled."""
 
-    BINDINGS = [("escape", "cancel", ""), ("o", "open", ""), ("c", "copy", "")]
+    BINDINGS = [("escape", "cancel", ""), ("o", "open", ""), ("c", "copy", ""), ("k", "copy_code", "")]
 
     def __init__(self, provider="twitch"):
         super().__init__()
@@ -123,7 +124,7 @@ class LoginScreen(ModalScreen):
         self.device, self.cancelled = None, False
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
+        with Vertical(classes="dialog", id="login-dialog"):
             yield Static(t(self.p.title), classes="title")
             yield Static(t(self.p.sub), classes="sub")
             yield Static(t(self.p.step1), classes="step")
@@ -134,6 +135,7 @@ class LoginScreen(ModalScreen):
             with Horizontal(classes="buttons"):
                 yield Button(t("Skip") if self.provider == "google" else t("Cancel"), id="cancel")
                 yield Button(t("Copy link"), id="copy")
+                yield Button(t("Copy code"), id="copy-code", disabled=True)
                 yield Button(t(self.p.open_label), id="open", variant="primary")
 
     def on_mount(self):
@@ -174,6 +176,7 @@ class LoginScreen(ModalScreen):
 
     def _show_code(self, d):
         self.query_one("#code").update(d["user_code"])
+        self.query_one("#copy-code").disabled = False
         self.query_one("#url").update(d["verification_uri"].split("?")[0])
         self._status(t(self.p.waiting))
 
@@ -196,12 +199,18 @@ class LoginScreen(ModalScreen):
             copy_text(self.app, url)
             self.app.notify(t("Copied to the clipboard"), timeout=3)
 
+    def action_copy_code(self):
+        if self.device:  # without dashes or spaces, ready to paste in the sign-in page
+            copy_text(self.app, "".join(ch for ch in self.device["user_code"] if ch.isalnum()))
+            self.app.notify(t("Code copied"), timeout=3)
+
     def action_cancel(self):
         self.cancelled = True
         self.dismiss(None)
 
     def on_button_pressed(self, event):
-        {"open": self.action_open, "copy": self.action_copy, "cancel": self.action_cancel}[event.button.id]()
+        {"open": self.action_open, "copy": self.action_copy, "copy-code": self.action_copy_code,
+         "cancel": self.action_cancel}[event.button.id]()
 
 
 # ───────────────────────── video player ─────────────────────────
@@ -295,6 +304,54 @@ class PlayerSetupScreen(ModalScreen):
             self.action_copy()
         elif bid == "close":
             self.action_close()
+
+
+# ───────────────────────── updates ─────────────────────────
+
+class UpdateScreen(ModalScreen):
+    """A newer openlive is out. Dismisses with "update" (update in the background) or None (later)."""
+
+    BINDINGS = [("escape", "later", ""), ("c", "copy", "")]
+
+    def __init__(self, version):
+        super().__init__()
+        self.version = version
+        self.auto = updater.can_update()
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            yield Static(t("openlive {v} is out", v=self.version), classes="title")
+            yield Static(t("You have {cur}.", cur=__version__), classes="sub")
+            if self.auto:
+                yield Static(t("It updates in the background; you can keep watching."), classes="step")
+            else:
+                yield Static(t("To update, run this in a terminal:"), classes="step")
+                yield Static(updater.manual_command(), id="install-cmd")
+            with Horizontal(classes="buttons"):
+                yield Button(t("Later"), id="later")
+                if self.auto:
+                    yield Button(t("Update"), id="update", variant="primary")
+                else:
+                    yield Button(t("Copy"), id="copy", variant="primary")
+
+    def on_mount(self):
+        self.query_one("#update" if self.auto else "#copy").focus()
+
+    def action_later(self):
+        self.dismiss(None)
+
+    def action_copy(self):
+        if not self.auto:
+            copy_text(self.app, updater.manual_command())
+            self.app.notify(t("Copied to the clipboard"), timeout=3)
+
+    def on_button_pressed(self, event):
+        if event.button.id == "update":
+            self.dismiss("update")
+        elif event.button.id == "copy":
+            self.action_copy()
+        else:
+            self.dismiss(None)
 
 
 # ───────────────────────── platforms ─────────────────────────

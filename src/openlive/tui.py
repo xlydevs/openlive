@@ -13,7 +13,7 @@ from textual.coordinate import Coordinate
 from textual.theme import Theme
 from textual.widgets import DataTable, Footer, Input, Static, TabbedContent, TabPane
 
-from . import channels, config, demo, google, kick, onboard, player, settings, twitch, youtube
+from . import channels, config, demo, google, kick, onboard, player, settings, twitch, updater, youtube
 from .common import (
     ACCENT,
     BG,
@@ -344,6 +344,7 @@ class OpenLive(App):
         Binding("p", "platforms", t("Platforms"), show=False),
         Binding("l", "login", t("Sign in"), show=False),
         Binding("g", "google_login", "Google", show=False),
+        Binding("u", "update", t("Update"), show=False),
         Binding("escape", "unfocus", "", show=False),
         *[Binding(channels.KEY[p], f"toggle('{p}')", "", show=False) for p in channels.ALL],
         *[Binding(str(i + 1), f"tab('{k}')", "", show=False) for i, k in enumerate((*TABS, "settings"))],
@@ -357,6 +358,8 @@ class OpenLive(App):
         self.gauth = None
         self.skipped = set()   # setup steps already offered this session
         self.opening = set()   # channel keys whose player is starting right now
+        self.new_version = None  # a newer openlive on GitHub
+        self.update_state = None  # None, "running", "done", "on_exit"
         self.yt_at = 0.0       # last YouTube check (signed in: every few minutes, it costs API quota)
         self.favs = {"lunacodes", "kick:emberfox"} if demo_mode else config.favourites()
         self.platforms = list(channels.ALL) if demo_mode else (config.enabled_platforms() or [])
@@ -417,6 +420,8 @@ class OpenLive(App):
         self.rebuild()
         self.update_bar()
         self.pane("live").table.focus()
+        if not config.OFFLINE and config.get("check_updates", True):
+            self.check_update()
         if not self.platforms:
             self.call_after_refresh(self.action_platforms, True)
         else:
@@ -644,6 +649,8 @@ class OpenLive(App):
             st.append("⚠ " + self.warning, style=WARN_C)
         elif self.last_ok:
             st.append(f"✓ {self.last_ok:%H:%M}", style=OK_C)
+        if self.new_version and self.update_state != "done":
+            st.append("   ⬆ " + (t("updating…") if self.update_state == "running" else f"{self.new_version} · u"), style=ACCENT)
         self.query_one("#status").update(st)
         if self.current == "settings":
             self.query_one(settings.SettingsPane).sync()
@@ -757,6 +764,46 @@ class OpenLive(App):
     def _mpv_old(self, v):
         config.save_setting("mpv_old_seen", True)  # say it once, not on every stream
         self.push_screen(onboard.PlayerSetupScreen(upgrade=True, version=v))
+
+    @work(thread=True, group="update", exclusive=True)
+    def check_update(self):
+        if v := updater.newer():
+            self.call_from_thread(self._update_found, v)
+
+    def _update_found(self, v):
+        self.new_version = v
+        self.update_bar()
+        if config.get("update_skipped") != v:  # the dialog once per version; later the bar keeps a reminder (u)
+            self.action_update()
+
+    def action_update(self):
+        if not self.new_version or self.update_state in ("running", "done", "on_exit"):
+            if self.update_state == "on_exit":
+                self.notify(t("openlive updates to {v} when you close it.", v=self.new_version), timeout=5)
+            return
+
+        def done(choice):
+            if choice == "update":
+                self.update_state = "running"
+                self.update_bar()
+                self.run_update()
+            else:
+                config.save_setting("update_skipped", self.new_version)
+        self.push_screen(onboard.UpdateScreen(self.new_version), done)
+
+    @work(thread=True, group="update")
+    def run_update(self):
+        self.call_from_thread(self._updated, updater.update())
+
+    def _updated(self, result):
+        self.update_state = None if result == "failed" else result
+        self.update_bar()
+        if result == "done":
+            self.notify(t("openlive {v} is installed. Restart openlive to use it.", v=self.new_version), timeout=10)
+        elif result == "on_exit":
+            self.notify(t("openlive updates to {v} when you close it.", v=self.new_version), timeout=10)
+        else:
+            self.notify(t("The update didn't work. Run the install line from the README again."), severity="error", timeout=10)
 
     def _player_failed(self, why, r=None):
         if why == "no-streamlink":
