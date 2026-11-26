@@ -53,9 +53,9 @@ Instala [uv](https://docs.astral.sh/uv/) (un programa pequeño que trae su propi
 openlive
 ```
 
-Para actualizar, pega la misma línea otra vez. Para quitarlo: `uv tool uninstall openlive`. Puedes leer antes los dos scripts: [install.sh](install.sh), [install.ps1](install.ps1).
+**Actualizaciones:** cuando sale una versión nueva, openlive te avisa y se actualiza en segundo plano con un clic (`u` vuelve a mostrar el aviso; en Windows termina cuando cierras openlive). También puedes pegar la misma línea otra vez. Para quitarlo: `uv tool uninstall openlive`. Puedes leer antes los dos scripts: [install.sh](install.sh), [install.ps1](install.ps1).
 
-¿Ya tienes uv o pipx? `uv tool install "openlive @ https://github.com/xlydevs/openlive/archive/refs/heads/main.tar.gz"` hace lo mismo (Python 3.11+). IINA y VLC también funcionan, sin rebobinado ni chat.
+¿Ya tienes uv o pipx? `uv tool install "openlive @ https://github.com/xlydevs/openlive/archive/refs/heads/main.tar.gz"` hace lo mismo (Python 3.11+). openlive reproduce en mpv; en Ajustes puedes elegir IINA o VLC, sin rebobinado ni chat.
 
 Si aun así no tienes reproductor, openlive se ofrece a instalar mpv la primera vez que abres un directo (con Homebrew en macOS y winget en Windows; en Linux te enseña la línea `sudo apt/dnf/pacman` que debes ejecutar). También busca mpv donde lo dejan los instaladores de Windows y avisa una vez si tu mpv es demasiado antiguo para escribir en el chat (0.38+).
 
@@ -163,6 +163,8 @@ uvx ruff check .
 .venv/bin/python scripts/screenshots.py   # docs/screenshots/*.svg con datos de demo
 vhs scripts/demo.tape                     # docs/demo.gif
 ```
+
+Publicar una actualización: sube `__version__` en `src/openlive/__init__.py` y haz push a `main`. Las copias instaladas ven el número nuevo en unas horas y ofrecen actualizarse.
 
 Usar tu propia app de Twitch: crea una app **Public** en [dev.twitch.tv](https://dev.twitch.tv/console/apps/create) (redirección `http://localhost`) y pon `client_id` en la configuración o en `$OPENLIVE_CLIENT_ID`.
 
