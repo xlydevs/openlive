@@ -51,6 +51,9 @@ Type "4" Sleep 1.2s
 Type "pixel" Sleep 0.8s
 Enter Sleep 3s
 
+# Settings: accounts, Kick channels, player options
+Type "5" Sleep 3.5s
+
 # back to Live and "watch" (demo shows what would open)
 Type "1" Sleep 1.2s
 Enter Sleep 3s

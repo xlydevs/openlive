@@ -28,6 +28,8 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 | Following | Add Kick / YouTube channels |
 |---|---|
 | ![Following](docs/screenshots/following.svg) | ![Add channels](docs/screenshots/add-channels.svg) |
+| **Search (every platform)** | **Settings** |
+| ![Search](docs/screenshots/search.svg) | ![Settings](docs/screenshots/settings.svg) |
 
 ## Install
 

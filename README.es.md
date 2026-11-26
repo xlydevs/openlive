@@ -28,6 +28,8 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 | Siguiendo | Añadir canales de Kick / YouTube |
 |---|---|
 | ![Siguiendo](docs/screenshots/following.svg) | ![Añadir canales](docs/screenshots/add-channels.svg) |
+| **Buscar (todas las plataformas)** | **Ajustes** |
+| ![Buscar](docs/screenshots/search.svg) | ![Ajustes](docs/screenshots/settings.svg) |
 
 ## Instalación
 
