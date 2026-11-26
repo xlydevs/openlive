@@ -9,6 +9,7 @@ Other players (IINA, VLC) get the stream through streamlink as before.
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,9 +21,21 @@ from pathlib import Path
 from . import config, kick, net
 from .i18n import t
 
+
+def _win_paths(*parts):
+    """Where Windows installers usually put a program, for when it isn't on the PATH."""
+    roots = [os.environ.get(v) for v in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "ProgramData", "USERPROFILE")]
+    return [os.path.join(r, *parts) for r in roots if r]
+
+
+MPV_WIN = [*_win_paths("Microsoft", "WinGet", "Links", "mpv.exe"), *_win_paths("Programs", "mpv", "mpv.exe"),
+           *_win_paths("mpv", "mpv.exe"), *_win_paths("chocolatey", "bin", "mpv.exe"), *_win_paths("scoop", "shims", "mpv.exe")]
+MIN_MPV = (0, 38)  # mp.input, used to write in the chat
+
 # name → candidate executables (first that exists wins)
 PLAYERS = {
-    "mpv": ["mpv", "/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "/Applications/mpv.app/Contents/MacOS/mpv"],
+    "mpv": ["mpv", "/opt/homebrew/bin/mpv", "/usr/local/bin/mpv", "/Applications/mpv.app/Contents/MacOS/mpv",
+            "/usr/bin/mpv", "/snap/bin/mpv", *(MPV_WIN if sys.platform == "win32" else [])],
     "iina": ["iina", "/Applications/IINA.app/Contents/MacOS/iina-cli"],
     "vlc": ["vlc", "/Applications/VLC.app/Contents/MacOS/VLC", r"C:\Program Files\VideoLAN\VLC\vlc.exe"],
 }
@@ -77,6 +90,45 @@ def find_player(name=None):
             if p:
                 return n, p
     return None, None
+
+
+def mpv_version(path):
+    """(major, minor) of an mpv executable, or None when it can't be told."""
+    try:
+        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"mpv v?(\d+)\.(\d+)", out)
+    return (int(m[1]), int(m[2])) if m else None
+
+
+def install_plan(upgrade=False):
+    """How to get (or update) mpv on this computer: {"cmd": argv openlive can run itself or None,
+    "show": the command to show and copy, or None, "url": a download page}. Commands that need sudo are only shown,
+    since they ask for a password in a terminal."""
+    url = "https://mpv.io/installation/"
+    if sys.platform == "darwin":
+        brew = shutil.which("brew") or next((b for b in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew") if Path(b).exists()), None)
+        if brew:
+            cmd = [brew, "upgrade" if upgrade else "install", "mpv"]
+            return {"cmd": cmd, "show": f"brew {cmd[1]} mpv", "url": url}
+        return {"cmd": None, "show": None, "url": "https://brew.sh"}
+    if sys.platform == "win32":
+        if winget := shutil.which("winget"):
+            verb = "upgrade" if upgrade else "install"
+            cmd = [winget, verb, "--id", "shinchiro.mpv", "--exact", "--source", "winget",
+                   "--accept-package-agreements", "--accept-source-agreements"]
+            return {"cmd": cmd, "show": f"winget {verb} --id shinchiro.mpv --exact", "url": url}
+        if scoop := shutil.which("scoop"):
+            return {"cmd": [scoop, "update" if upgrade else "install", "mpv"], "show": f"scoop {'update' if upgrade else 'install'} mpv", "url": url}
+        return {"cmd": None, "show": None, "url": url}
+    for tool, line in (("apt-get", "sudo apt install mpv"), ("dnf", "sudo dnf install mpv"), ("pacman", "sudo pacman -S mpv"),
+                       ("zypper", "sudo zypper install mpv"), ("apk", "sudo apk add mpv")):
+        if shutil.which(tool):
+            if upgrade:
+                line = line.replace(" install ", " upgrade ").replace(" -S ", " -Syu ").replace(" add ", " upgrade ")
+            return {"cmd": None, "show": line, "url": url}
+    return {"cmd": None, "show": None, "url": url}
 
 
 def streamlink_cmd():
