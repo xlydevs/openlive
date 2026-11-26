@@ -228,3 +228,25 @@ async def test_one_click_opens_once_per_streamer(monkeypatch):
         await pilot.click("#table-live", offset=(40, 0))   # header click sorts, never opens
         await pilot.pause(0.1)
         assert len(started) == 2
+
+
+async def test_missing_player_offers_install_then_plays(monkeypatch):
+    config.OFFLINE = True
+    from openlive import player
+    from openlive.tui import make_app
+    monkeypatch.setattr(player, "install_plan", lambda upgrade=False: {"cmd": ["true"], "show": "brew install mpv", "url": "u"})
+    app = make_app(demo_mode=True)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.2)
+        app.demo = False
+        r = app.pane("live").shown[0]
+        reopened = []
+        app._player_failed("no-player", r)
+        await pilot.pause(0.1)
+        assert isinstance(app.screen, onboard.PlayerSetupScreen)
+        monkeypatch.setattr(app, "open_player", lambda row: reopened.append(row["login"]))
+        monkeypatch.setattr(player, "find_player", lambda name=None: ("mpv", "/usr/bin/mpv"))
+        monkeypatch.setattr(onboard.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})())
+        await pilot.click("#install")
+        await pilot.pause(0.5)
+        assert not isinstance(app.screen, onboard.PlayerSetupScreen) and reopened == [r["login"]]

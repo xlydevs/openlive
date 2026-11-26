@@ -13,12 +13,12 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, OptionList, Select, SelectionList, Static
 from textual.widgets.option_list import Option
 
-from . import channels, config, demo, google, kick, net, twitch, youtube
+from . import channels, config, demo, google, kick, net, player, twitch, youtube
 from .common import human
 from .i18n import t
 
 CSS = """
-LoginScreen, PlatformsScreen, AddChannelScreen { align: center middle; background: #0f1420 70%; }
+LoginScreen, PlatformsScreen, AddChannelScreen, PlayerSetupScreen { align: center middle; background: #0f1420 70%; }
 #platforms { height: auto; background: #141b2a; border: none; padding: 0; }
 #platforms:focus { background-tint: transparent; }
 #platforms > .selection-list--button { color: #1a2335; background: #1a2335; }
@@ -41,6 +41,8 @@ LoginScreen, PlatformsScreen, AddChannelScreen { align: center middle; backgroun
 #code { width: 100%; height: 3; content-align: center middle; text-style: bold; color: #0f1420; background: #f2cc8f; margin: 1 0; }
 #url { color: #9cc8e8; text-align: center; }
 #login-status { color: #7c879f; margin-top: 1; }
+#install-cmd { width: 100%; height: 3; content-align: center middle; color: #eef2fa; background: #0f1420; border: round #263044; margin: 1 0 0 0; }
+#install-status { color: #7c879f; margin-top: 1; height: auto; }
 .buttons { height: auto; align-horizontal: right; margin-top: 1; }
 .buttons Button { margin-left: 2; }
 """
@@ -200,6 +202,99 @@ class LoginScreen(ModalScreen):
 
     def on_button_pressed(self, event):
         {"open": self.action_open, "copy": self.action_copy, "cancel": self.action_cancel}[event.button.id]()
+
+
+# ───────────────────────── video player ─────────────────────────
+
+class PlayerSetupScreen(ModalScreen):
+    """No video player yet (or an old mpv): show the command that installs mpv, copy it or run it.
+    Dismisses with True once a player is found, else None."""
+
+    BINDINGS = [("escape", "close", ""), ("c", "copy", "")]
+
+    def __init__(self, upgrade=False, version=None):
+        super().__init__()
+        self.upgrade, self.version = upgrade, version
+        self.plan = player.install_plan(upgrade)
+        self.busy = False
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog"):
+            if self.upgrade:
+                yield Static(t("Update mpv"), classes="title")
+                yield Static(t("Your mpv is {v}. Writing in the chat needs 0.38 or newer; the rest works.",
+                               v=".".join(map(str, self.version or ()))), classes="sub")
+            else:
+                yield Static(t("Install a video player"), classes="title")
+                yield Static(t("openlive plays streams in mpv, and it isn't on this computer yet. openlive sets it up by itself once it's installed."), classes="sub")
+            show = self.plan["show"]
+            yield Static(show or self.plan["url"], id="install-cmd")
+            if self.plan["cmd"]:
+                msg = t("Update runs this command for you. It can take a few minutes.") if self.upgrade else \
+                    t("Install runs this command for you. It can take a few minutes.")
+            elif show:
+                msg = t("Run it in a terminal (it asks for your password), then open the stream again.")
+            else:
+                msg = t("Download mpv from this page, then open the stream again.")
+            yield Static(msg, id="install-status")
+            with Horizontal(classes="buttons"):
+                yield Button(t("Close"), id="close")
+                yield Button(t("Copy"), id="copy")
+                if self.plan["cmd"]:
+                    yield Button(t("Update") if self.upgrade else t("Install"), id="install", variant="primary")
+                elif not show:
+                    yield Button(t("Open page"), id="open", variant="primary")
+
+    def on_mount(self):
+        self.query_one("Button.-primary" if self.query("Button.-primary") else "#copy").focus()
+
+    def _status(self, msg, color="#7c879f"):
+        w = self.query_one("#install-status")
+        w.update(msg)
+        w.styles.color = color
+
+    def action_copy(self):
+        copy_text(self.app, self.plan["show"] or self.plan["url"])
+        self.app.notify(t("Copied to the clipboard"), timeout=3)
+
+    def action_close(self):
+        if not self.busy:
+            self.dismiss(None)
+
+    @work(thread=True, exclusive=True)
+    def run_install(self):
+        try:
+            out = subprocess.run(self.plan["cmd"], capture_output=True, text=True, timeout=900, stdin=subprocess.DEVNULL)
+            ok, tail = out.returncode == 0, (out.stderr or out.stdout or "").strip().splitlines()[-1:]
+        except (OSError, subprocess.SubprocessError) as e:
+            ok, tail = False, [str(e)]
+        self.app.call_from_thread(self._installed, ok, tail[0] if tail else "")
+
+    def _installed(self, ok, last):
+        self.busy = False
+        self.query_one("#install").disabled = False
+        name, path = player.find_player("mpv")
+        if path and (not self.upgrade or (player.mpv_version(path) or (0, 0)) >= player.MIN_MPV):
+            self.app.notify(t("mpv is ready."), timeout=4)
+            self.dismiss(True)
+        elif ok:
+            self._status(t("Installed, but openlive can't find mpv yet. Restart openlive (a new terminal may be needed)."), "#f2cc8f")
+        else:
+            self._status(t("It didn't work: {err}", err=last[:160] or "?"), "#f28b82")
+
+    def on_button_pressed(self, event):
+        bid = event.button.id
+        if bid == "install" and not self.busy:
+            self.busy = True
+            event.button.disabled = True
+            self._status(t("Installing… it can take a few minutes."), "#9cc8e8")
+            self.run_install()
+        elif bid == "open":
+            webbrowser.open(self.plan["url"])
+        elif bid == "copy":
+            self.action_copy()
+        elif bid == "close":
+            self.action_close()
 
 
 # ───────────────────────── platforms ─────────────────────────

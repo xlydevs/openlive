@@ -115,3 +115,26 @@ def test_channel_key_matches_rows_and_logins(monkeypatch):
         def poll(self): return 0
     monkeypatch.setitem(player.RUNNING, "twitch:gone", Done())
     assert not player.is_open("gone") and "twitch:gone" not in player.RUNNING
+
+
+def test_install_plan_per_system(monkeypatch):
+    which = {"brew": "/opt/homebrew/bin/brew", "winget": r"C:\winget.exe", "apt-get": "/usr/bin/apt-get"}
+    monkeypatch.setattr(player.shutil, "which", lambda n: which.get(n))
+    monkeypatch.setattr(player.sys, "platform", "darwin")
+    assert player.install_plan()["cmd"] == ["/opt/homebrew/bin/brew", "install", "mpv"]
+    assert player.install_plan(upgrade=True)["show"] == "brew upgrade mpv"
+    monkeypatch.setattr(player.sys, "platform", "win32")
+    plan = player.install_plan()
+    assert plan["cmd"][:4] == [r"C:\winget.exe", "install", "--id", "shinchiro.mpv"]
+    monkeypatch.setattr(player.sys, "platform", "linux")
+    plan = player.install_plan()
+    assert plan["cmd"] is None and plan["show"] == "sudo apt install mpv"  # needs a password: shown, not run
+    monkeypatch.setattr(player.shutil, "which", lambda n: None)
+    assert player.install_plan() == {"cmd": None, "show": None, "url": "https://mpv.io/installation/"}
+
+
+def test_mpv_version(monkeypatch):
+    class Out:
+        stdout = "mpv v0.37.0 Copyright © 2000-2023 mpv/MPlayer/mplayer2 projects\n"
+    monkeypatch.setattr(player.subprocess, "run", lambda *a, **k: Out())
+    assert player.mpv_version("mpv") == (0, 37) < player.MIN_MPV

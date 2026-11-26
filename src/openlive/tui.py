@@ -746,14 +746,29 @@ class OpenLive(App):
         finally:
             self.call_from_thread(self.opening.discard, player.channel_key(r))
         if not ok:
-            self.call_from_thread(self._player_failed, why)
+            self.call_from_thread(self._player_failed, why, r)
+            return
+        name, path = player.find_player()
+        if name == "mpv" and not config.get("mpv_old_seen"):
+            v = player.mpv_version(path)
+            if v and v < player.MIN_MPV:
+                self.call_from_thread(self._mpv_old, v)
 
-    def _player_failed(self, why):
+    def _mpv_old(self, v):
+        config.save_setting("mpv_old_seen", True)  # say it once, not on every stream
+        self.push_screen(onboard.PlayerSetupScreen(upgrade=True, version=v))
+
+    def _player_failed(self, why, r=None):
         if why == "no-streamlink":
             self.notify(t("streamlink isn't installed. Reinstall openlive or run: pipx install streamlink"), severity="error", timeout=8)
-        else:
-            self.notify(t("No video player found. Install mpv (https://mpv.io), IINA or VLC, or set player in the config."),
-                        severity="error", timeout=8)
+            return
+
+        def done(found):
+            if found and r:
+                self.opening.add(player.channel_key(r))
+                self.notify(t("Opening {name}… the player takes a few seconds to appear.", name=r["name"]), timeout=6)
+                self.open_player(r)
+        self.push_screen(onboard.PlayerSetupScreen(), done)
 
     def action_web(self):
         if (r := self.selected()) and not self.demo: player.open_web(r)
