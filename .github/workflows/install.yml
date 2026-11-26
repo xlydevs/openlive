@@ -20,7 +20,8 @@ jobs:
       - run: |
           export PATH="$HOME/.local/bin:$PATH"
           openlive -V
-          openlive --demo --text | head -3
+          openlive --demo --text > demo.txt
+          head -3 demo.txt
           command -v mpv || test -x /Applications/mpv.app/Contents/MacOS/mpv
 
   windows:
@@ -33,4 +34,6 @@ jobs:
         run: |
           $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
           openlive -V
-          openlive --demo --text | Select-Object -First 3
+          openlive --demo --text > demo.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Content demo.txt -TotalCount 3
