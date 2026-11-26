@@ -3,7 +3,8 @@
 # It installs uv (a single program that brings its own Python), then openlive, then mpv if it's missing.
 # Uninstall with: uv tool uninstall openlive
 
-$ErrorActionPreference = "Stop"
+# "Continue": in Windows PowerShell 5, "Stop" turns any text a program writes to stderr into a fatal error
+$ErrorActionPreference = "Continue"
 $src = "https://github.com/xlydevs/openlive/archive/refs/heads/main.zip"
 
 function Say($msg) { Write-Host "==> $msg" -ForegroundColor Yellow }
@@ -21,7 +22,7 @@ if (-not (Have "uv")) {
 Say "Installing openlive..."
 uv tool install --force --python 3.12 "openlive @ $src"
 if ($LASTEXITCODE -ne 0) { Warn "openlive couldn't be installed (see the message above)."; return }
-uv tool update-shell 2>$null | Out-Null
+try { uv tool update-shell *> $null } catch { }
 
 # 3. mpv, the video player openlive sets up for rewind and chat
 $mpvPaths = @(

@@ -21,6 +21,7 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           openlive -V
           openlive --demo --text | head -3
+          command -v mpv || test -x /Applications/mpv.app/Contents/MacOS/mpv
 
   windows:
     runs-on: windows-latest

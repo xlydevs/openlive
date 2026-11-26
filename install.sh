@@ -46,7 +46,7 @@ elif [ "$(uname)" = "Darwin" ]; then
     fi
 else
     CMD=""
-    if have apt-get; then CMD="apt-get install -y mpv"
+    if have apt-get; then CMD="sh -c 'apt-get update -qq && apt-get install -y mpv'"
     elif have dnf; then CMD="dnf install -y mpv"
     elif have pacman; then CMD="pacman -S --noconfirm mpv"
     elif have zypper; then CMD="zypper --non-interactive install mpv"
@@ -54,8 +54,8 @@ else
     fi
     if [ -n "$CMD" ] && have sudo; then
         say "Installing mpv (sudo asks for your password)…"
-        # shellcheck disable=SC2086
-        sudo $CMD </dev/tty || warn "Couldn't install mpv. Try later: sudo $CMD"
+        if (: </dev/tty) 2>/dev/null; then TTY=/dev/tty; else TTY=/dev/null; fi  # curl | sh: ask on the terminal
+        eval "sudo $CMD" <"$TTY" || warn "Couldn't install mpv. Try later: sudo $CMD"
     else
         warn "openlive plays streams in mpv. Install it from https://mpv.io/installation/"
     fi
