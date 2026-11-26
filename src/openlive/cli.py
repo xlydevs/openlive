@@ -26,6 +26,10 @@ def main(argv=None):
         config.set_data_dir(tempfile.mkdtemp(prefix="openlive-demo-"))
         config.OFFLINE = True
     if args.text or not sys.stdout.isatty():
+        try:  # titles carry emoji; a Windows console or pipe may use a code page without them
+            sys.stdout.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
         from .text import run
         return run(args.demo, out=lambda s: print(s))
     from .tui import make_app
