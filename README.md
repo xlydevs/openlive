@@ -152,7 +152,7 @@ On Windows they live in `%APPDATA%\openlive` and `%LOCALAPPDATA%\openlive`. `$OP
 
 **Not supported:** chat inside the terminal, VODs of past streams, clips and regular YouTube videos, Browse on Kick or YouTube (no public API for it). Ads and sub-only streams behave as they do in streamlink.
 
-**Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). No analytics.
+**Privacy:** nothing is sent anywhere but Twitch, Kick, YouTube and Google (for the sign-in). No analytics. Full text: [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

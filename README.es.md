@@ -152,7 +152,7 @@ En Windows están en `%APPDATA%\openlive` y `%LOCALAPPDATA%\openlive`. `$OPENLIV
 
 **No incluye:** chat dentro de la terminal; VODs de directos pasados, clips ni vídeos normales de YouTube; Explorar en Kick o YouTube (no hay API pública para eso). Los anuncios y los directos solo para suscriptores se comportan como en streamlink.
 
-**Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick, YouTube y Google (para iniciar sesión). Sin analíticas.
+**Privacidad:** no se envía nada a ningún sitio salvo a Twitch, Kick, YouTube y Google (para iniciar sesión). Sin analíticas. Texto completo: [PRIVACY.md](PRIVACY.md).
 
 ## Desarrollo
 
