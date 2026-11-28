@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-11-28
+
+- Fixed a crash when opening a stream (Python 3.12 can't read the signature of `set.discard`).
+
 ## 0.1.0 — 2026-11-28
 
 First public version, rewritten from a personal shell script.
