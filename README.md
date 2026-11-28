@@ -55,7 +55,7 @@ openlive
 
 **Updates:** when a new version is out, openlive tells you and updates itself in the background with one click (`u` brings the dialog back; on Windows it finishes when you close openlive). You can also paste the same line again. To remove it: `uv tool uninstall openlive`. You can read both scripts first: [install.sh](install.sh), [install.ps1](install.ps1).
 
-Already have uv or pipx? `uv tool install "openlive @ https://github.com/xlydevs/openlive/archive/refs/heads/main.tar.gz"` does the same (Python 3.11+). openlive plays in mpv; IINA or VLC can be picked in Settings, without rewind and chat.
+Already have Python 3.11+? `pipx install openlive` or `uv tool install openlive` (from [PyPI](https://pypi.org/project/openlive/)) work too; you install mpv yourself. openlive plays in mpv; IINA or VLC can be picked in Settings, without rewind and chat.
 
 If there's still no player, openlive offers to install mpv the first time you open a stream (Homebrew on macOS, winget on Windows; on Linux it shows the `sudo apt/dnf/pacman` line to run). It also looks for mpv where Windows installers put it, and says once if your mpv is too old to write in the chat (0.38+).
 

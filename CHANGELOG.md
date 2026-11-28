@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 — 2026-11-28
 
+- On PyPI: `pipx install openlive` or `uv tool install openlive`. Those installs update themselves too (uv) or show the command to run (pipx, pip).
 - Looks for a new version every time openlive starts and once an hour while it is open (it was every 6 hours).
 
 ## 0.1.2 — 2026-11-28
