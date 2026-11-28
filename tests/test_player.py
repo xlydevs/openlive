@@ -28,7 +28,8 @@ def test_twitch_plays_the_growing_recording_in_mpv(monkeypatch, tmp_path):
         def current_vod(self, uid, started):
             assert uid == "42"
             return "https://www.twitch.tv/videos/1"
-    monkeypatch.setattr(player, "_direct_url", lambda url, q: "https://cdn/x/index-dvr.m3u8" if "videos/1" in url else None)
+    monkeypatch.setattr(player, "_streams", lambda url: [("1080p60", "https://cdn/x/index-dvr.m3u8"), ("720p60", "https://cdn/7")]
+                        if "videos/1" in url else [])
     row = {"platform": "twitch", "login": "a", "name": "A", "user_id": "42", "started_at": "2026-01-01T00:00:00Z"}
     cmd, bridge = player.command_for(row, "hi", C())
     assert cmd[0] == str(exe) and cmd[-1] == "https://cdn/x/index-dvr.m3u8" and "--start=-6" in cmd
@@ -37,6 +38,7 @@ def test_twitch_plays_the_growing_recording_in_mpv(monkeypatch, tmp_path):
     assert "osc=no" in (d / "mpv.conf").read_text()
     session = json.loads(open(cmd[2].split("=", 2)[2]).read())
     assert session["mode"] == "vod" and session["chat"] == "a" and session["channel"] == "A" and session["text"]["live"]
+    assert session["quality"] == "1080p60" and [q["name"] for q in session["qualities"]] == ["1080p60", "720p60"]
     ipc = next(c for c in cmd if c.startswith("--input-ipc-server=")).split("=", 1)[1]
     assert bridge[-4:] == ["openlive.chat", ipc, "a", "42"]
 
@@ -52,14 +54,45 @@ def test_no_recording_falls_back_to_streamlink_with_openlive_mpv(monkeypatch, tm
 
 
 def test_kick_and_youtube_sessions(monkeypatch):
-    monkeypatch.setattr(player, "_direct_url", lambda url, q: "https://live/k.m3u8")
+    monkeypatch.setattr(player, "_streams", lambda url: [("720p60", "https://live/k.m3u8")])
     monkeypatch.setattr(player.kick, "current_vod", lambda slug: "https://vod/k.m3u8")
+    monkeypatch.setattr(player, "_variants", lambda url: [("720p60", "https://vod/720.m3u8")])
     s = player.session_for({"platform": "kick", "login": "k"})
-    assert s["mode"] == "live" and s["vod"] == "https://vod/k.m3u8"
-    monkeypatch.setattr(player, "_youtube_hls", lambda page, q: ("https://yt/v.m3u8", "https://yt/a.m3u8"))
+    assert s["mode"] == "live" and s["vod"] == "https://vod/k.m3u8" and s["vod_qualities"][0]["url"] == "https://vod/720.m3u8"
+    monkeypatch.setattr(player, "_youtube_hls", lambda page, q: ("https://yt/v.m3u8", "https://yt/a.m3u8",
+                                                                  [("1080p60", "https://yt/v.m3u8"), ("720p", "https://yt/7")]))
     monkeypatch.setattr(player.net, "fetch", lambda url: ("#EXTM3U\n#EXT-X-TARGETDURATION:5\n" + "#EXTINF:5.0,\nx\n" * 720, url))
     s = player.session_for({"platform": "youtube", "login": "@x"})
-    assert s["dvr"] == 3600 and s["seg"] == 5 and s["audio"] == "https://yt/a.m3u8"
+    assert s["dvr"] == 3600 and s["seg"] == 5 and s["audio"] == "https://yt/a.m3u8" and s["quality"] == "1080p60"
+
+
+REAL_STREAMS = player._streams  # conftest swaps it for a no-network stub
+
+
+def test_streams_from_streamlink_json(monkeypatch):
+    import json
+    import subprocess
+    monkeypatch.setattr(player, "_streams", REAL_STREAMS)
+    found = {"streams": {n: {"type": "hls", "url": f"https://h/{n}"} for n in
+                         ("audio_only", "160p30", "720p60", "1080p60", "480p30", "worst", "best")}}
+    monkeypatch.setattr(player, "streamlink_cmd", lambda: ["streamlink"])
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(a, 0, json.dumps(found), ""))
+    streams = player._streams("https://twitch.tv/x")
+    assert [n for n, _ in streams] == ["1080p60", "720p60", "480p30", "160p30"]
+    assert player._choose(streams, "best") == ("1080p60", "https://h/1080p60")
+    assert player._choose(streams, "720p")[0] == "720p60"
+    assert player._choose(streams, "480p30")[0] == "480p30"
+    assert player._choose(streams, "worst")[0] == "160p30"
+    assert player._choose(streams, "100p")[0] == "160p30"
+    assert player._choose([], "best") is None
+
+
+def test_kick_recording_variants(monkeypatch):
+    master = ("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=1280x720,FRAME-RATE=60.000\n720p60/playlist.m3u8\n"
+              "#EXT-X-STREAM-INF:BANDWIDTH=2,RESOLUTION=1920x1080,FRAME-RATE=60.000\n1080p60/playlist.m3u8\n")
+    monkeypatch.setattr(player.net, "fetch", lambda url: (master, url))
+    assert player._variants("https://vod/k/master.m3u8") == [("1080p60", "https://vod/k/1080p60/playlist.m3u8"),
+                                                             ("720p60", "https://vod/k/720p60/playlist.m3u8")]
 
 
 def test_pick_quality_by_height():

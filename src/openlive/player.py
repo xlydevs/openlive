@@ -39,6 +39,8 @@ PLAYERS = {
     "iina": ["iina", "/Applications/IINA.app/Contents/MacOS/iina-cli"],
     "vlc": ["vlc", "/Applications/VLC.app/Contents/MacOS/VLC", r"C:\Program Files\VideoLAN\VLC\vlc.exe"],
 }
+# Windows: start console programs (streamlink, the chat bridge, uv's python launcher) without opening a console window
+NO_WINDOW = {"creationflags": 0x08000000} if sys.platform == "win32" else {}  # CREATE_NO_WINDOW
 DEFAULT_ARGS = {"mpv": "--force-window=immediate --cache=yes", "iina": "--keep-running", "vlc": ""}
 
 
@@ -55,6 +57,9 @@ demuxer-max-back-bytes={back}MiB
 demuxer-readahead-secs=60
 hls-bitrate=max
 """
+# Windows starts moving the window on any click mpv itself doesn't handle, even on the control bar; openlive_ui.lua
+# starts the move itself when the click lands on the video
+MPV_CONF_WIN = "window-dragging=no\n"
 def mpv_dir():
     return config.DATA / "mpv"
 
@@ -65,7 +70,7 @@ def prepare_mpv():
     (d / "scripts").mkdir(parents=True, exist_ok=True)
     (d / "script-opts").mkdir(exist_ok=True)
     mb = max(64, int(config.get("rewind_cache_mb", 1024) or 0))
-    conf = MPV_CONF.format(ahead=min(mb, 400), back=mb)
+    conf = MPV_CONF.format(ahead=min(mb, 400), back=mb) + (MPV_CONF_WIN if config.WIN else "")
     (d / "mpv.conf").write_text(conf)
     shutil.rmtree(d / "scripts" / "uosc", ignore_errors=True)  # earlier versions used uosc
     shutil.rmtree(d / "fonts", ignore_errors=True)
@@ -95,7 +100,7 @@ def find_player(name=None):
 def mpv_version(path):
     """(major, minor) of an mpv executable, or None when it can't be told."""
     try:
-        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10).stdout
+        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10, **NO_WINDOW).stdout
     except (OSError, subprocess.SubprocessError):
         return None
     m = re.search(r"mpv v?(\d+)\.(\d+)", out)
@@ -175,20 +180,57 @@ def build_command(target, title="", quality=None, player=None, extra_args=""):
 
 # ───────────────────────── mpv with rewind ─────────────────────────
 
-def _direct_url(url, quality):
-    """The HLS address streamlink finds for a page, so mpv can open (and seek) it itself."""
+def _rank(name):
+    """(height, fps) of a quality name such as '1080p60', for sorting."""
+    m = re.match(r"(\d+)p(\d*)", name)
+    return (int(m[1]), int(m[2] or 30)) if m else (0, 0)
+
+
+def _choose(streams, quality):
+    """The (name, url) to start with from a best-first list: the asked quality, or the best one up to its height."""
+    if not streams:
+        return None
+    named = dict(streams)
+    if quality in named:
+        return quality, named[quality]
+    if quality == "worst":
+        return streams[-1]
+    h = _rank(str(quality or ""))[0]
+    return next((st for st in streams if h and _rank(st[0])[0] <= h), streams[0] if not h else streams[-1])
+
+
+def _streams(url):
+    """[(quality, HLS url)] streamlink finds for a page, best first, without its 'best'/'worst' aliases or audio."""
     sl = streamlink_cmd()
     if not sl:
-        return None
-    for q in dict.fromkeys((quality, "best")):
-        try:
-            out = subprocess.run([*sl, "--stream-url", url, q], capture_output=True, text=True, timeout=30)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        lines = out.stdout.strip().splitlines()
-        if out.returncode == 0 and lines and lines[-1].startswith("http"):
-            return lines[-1]
-    return None
+        return []
+    try:
+        out = subprocess.run([*sl, "--json", url], capture_output=True, text=True, timeout=30, **NO_WINDOW)
+        found = json.loads(out.stdout or "{}").get("streams") or {}
+    except (OSError, subprocess.TimeoutExpired, ValueError, AttributeError):
+        return []
+    streams = [(k, v["url"]) for k, v in found.items()
+               if isinstance(v, dict) and str(v.get("url", "")).startswith("http") and _rank(k)[0]]
+    return sorted(streams, key=lambda st: _rank(st[0]), reverse=True)
+
+
+def _variants(master):
+    """[(quality, url)] of an HLS master playlist (Kick's recording), best first, named like streamlink does."""
+    from urllib.parse import urljoin
+    try:
+        text, _ = net.fetch(master)
+    except net.NetError:
+        return []
+    lines, out = text.splitlines(), {}
+    for i, line in enumerate(lines[:-1]):
+        if line.startswith("#EXT-X-STREAM-INF:") and (m := re.search(r"RESOLUTION=\d+x(\d+)", line)):
+            fps = re.search(r"FRAME-RATE=([\d.]+)", line)
+            out.setdefault(f"{m[1]}p{round(float(fps[1])) if fps else 30}", urljoin(master, lines[i + 1].strip()))
+    return sorted(out.items(), key=lambda st: _rank(st[0]), reverse=True)
+
+
+def _qualities(streams):
+    return [{"name": k, "url": u} for k, u in streams]
 
 
 def _hls_window(url):
@@ -214,48 +256,69 @@ def _pick(formats, quality):
     return fit[-1] if fit else formats[0]
 
 
+def _yt_name(f):
+    fps = f.get("fps") or 30
+    return f"{f.get('height') or 0}p{round(fps) if fps > 30 else ''}"
+
+
 def _youtube_hls(page, quality):
-    """(video url, audio url or None) of a YouTube live stream. The separate video/audio playlists keep the
-    channel's DVR window (up to ~1 h); the combined one streamlink uses keeps only ~30 s."""
+    """(video url, audio url or None, [(quality, video url)] best first) of a YouTube live stream. The separate
+    video/audio playlists keep the channel's DVR window (up to ~1 h); the combined one streamlink uses keeps ~30 s."""
     import yt_dlp
     with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True, "noprogress": True}) as y:
         info = y.extract_info(page, download=False)
     fs = [f for f in info.get("formats") or [] if str(f.get("protocol", "")).startswith("m3u8") and f.get("url")]
     novideo, noaudio = (lambda f: f.get("vcodec") in (None, "none")), (lambda f: f.get("acodec") in (None, "none"))
-    video = _pick([f for f in fs if not novideo(f) and noaudio(f)], quality)
+    videos = [f for f in fs if not novideo(f) and noaudio(f)]
     audio = max((f for f in fs if novideo(f)), key=lambda f: f.get("tbr") or f.get("abr") or 0, default=None)
-    if video and audio:
-        return video["url"], audio["url"]
-    both = _pick([f for f in fs if not novideo(f) and not noaudio(f)], quality)
-    return (both["url"], None) if both else (None, None)
+    if not (videos and audio):
+        videos, audio = [f for f in fs if not novideo(f) and not noaudio(f)], None
+    video = _pick(videos, quality)
+    if not video:
+        return None, None, []
+    best = {}
+    for f in sorted(videos, key=lambda f: f.get("tbr") or 0):  # one per quality name, the highest bitrate
+        if f.get("height"):
+            best[_yt_name(f)] = f["url"]
+    streams = sorted(best.items(), key=lambda st: _rank(st[0]), reverse=True)
+    return video["url"], audio and audio["url"], streams
 
 
 def session_for(r, client=None, quality="best"):
-    """What openlive's mpv script needs to rewind this stream, or None to play it through streamlink."""
+    """What openlive's mpv script needs to rewind this stream (and change its quality), or None to play it through
+    streamlink."""
     plat = r.get("platform", "twitch")
     if plat == "twitch":
         if not client or not r.get("user_id"):
             return None
         vod = client.current_vod(r["user_id"], r.get("started_at", ""))
-        url = vod and _direct_url(vod, quality)
-        return {"platform": "twitch", "mode": "vod", "url": url, "start": "-6"} if url else None
+        streams = _streams(vod) if vod else []
+        pick = _choose(streams, quality)
+        if not pick:
+            return None
+        return {"platform": "twitch", "mode": "vod", "url": pick[1], "start": "-6", "quality": pick[0],
+                "qualities": _qualities(streams)}
     if plat == "kick":
-        live = _direct_url(stream_url(r), quality)
-        if not live:
+        streams = _streams(stream_url(r))
+        pick = _choose(streams, quality)
+        if not pick:
             return None
         try:
             vod = kick.current_vod(r["login"])
         except net.NetError:
             vod = None
-        return {"platform": "kick", "mode": "live", "url": live, "live": live, "vod": vod}
-    live, audio = _youtube_hls(stream_url(r), quality)
+        return {"platform": "kick", "mode": "live", "url": pick[1], "live": pick[1], "vod": vod, "quality": pick[0],
+                "qualities": _qualities(streams), "vod_qualities": _qualities(_variants(vod)) if vod else []}
+    live, audio, streams = _youtube_hls(stream_url(r), quality)
     if not live:
         return None
     try:
         seg, dvr = _hls_window(live)
     except (net.NetError, ValueError):
         seg, dvr = 5.0, 0
-    return {"platform": "youtube", "mode": "live", "url": live, "live": live, "audio": audio, "seg": seg, "dvr": dvr}
+    name = next((k for k, u in streams if u == live), "")
+    return {"platform": "youtube", "mode": "live", "url": live, "live": live, "audio": audio, "seg": seg, "dvr": dvr,
+            "quality": name, "qualities": _qualities(streams)}
 
 
 def _session_file(d, sess):
@@ -268,7 +331,8 @@ def _session_file(d, sess):
                     "chat_not_sent": t("Not sent: {why}"), "chat_no_input": t("Writing needs mpv 0.38 or newer."),
                     "play": t("Play"), "pause": t("Pause"), "back10": t("Back 10 s"), "fwd10": t("Forward 10 s"),
                     "mute": t("Mute"), "unmute": t("Unmute"), "go_live": t("Go live"), "loading": t("Loading…"),
-                    "fullscreen": t("Full screen"), "open_chat": t("Open chat"), "close_chat": t("Close chat")}
+                    "fullscreen": t("Full screen"), "open_chat": t("Open chat"), "close_chat": t("Close chat"),
+                    "quality": t("Quality"), "quality_set": t("Quality: {q}")}
     path = d / f"session-{os.getpid()}-{time.time_ns()}.json"
     path.write_text(json.dumps(sess))
     return path
@@ -358,7 +422,9 @@ def play(target, title="", client=None):
     if not config.OFFLINE:
         config.DATA.mkdir(parents=True, exist_ok=True)
         log = open(config.DATA / "player.log", "ab")  # noqa: SIM115 (handed to the child)
-    kw = {"creationflags": 0x00000008} if config.WIN else {"start_new_session": True}  # DETACHED_PROCESS
+    # Windows: CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP. Not DETACHED_PROCESS: uv's python.exe is a launcher, and
+    # the real python it starts would then open a console window of its own
+    kw = {"creationflags": 0x08000000 | 0x00000200} if config.WIN else {"start_new_session": True}
     try:
         RUNNING[channel_key(target)] = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log or subprocess.DEVNULL,
                                                         stderr=subprocess.STDOUT, **kw)

@@ -15,6 +15,7 @@ local S = { text = {} }            -- session from openlive.lua
 local chat_on = false
 local last_move, hover_bar = 0, false
 local hits, mouse, dragging, zone_top = {}, nil, nil, nil
+local menu_open = false             -- the quality list
 local osc = mp.create_osd_overlay("ass-events")
 local chat = mp.create_osd_overlay("ass-events")
 osc.z, chat.z = 2, 1
@@ -242,7 +243,7 @@ local function timeline()
 end
 
 local function visible()
-    return dragging or hover_bar or mp.get_property_bool("pause") or (mp.get_time() - last_move < 2.5)
+    return dragging or hover_bar or menu_open or mp.get_property_bool("pause") or (mp.get_time() - last_move < 2.5)
 end
 
 local function inside(m, x1, y1, x2, y2) return m and m.x >= x1 and m.x <= x2 and m.y >= y1 and m.y <= y2 end
@@ -386,17 +387,25 @@ local function render_osc()
         kind = "volume", wheel = function(d) set_volume((muted and 0 or vol) + d * 5) end }
     x = sx2 + math.floor(18 * u)
 
-    -- live pill
+    -- live: a red LIVE badge, or how far behind and a button back to live
     if behind then
-        local live = behind < 12 and S.mode ~= "pipe"
-        local label = live and tr("live", "LIVE") or ("−" .. fmt_time(behind))
-        local pw = text_w(label, fs) + 30 * u
         local ph = fs * 0.95
-        local hov = not live and inside(mouse, x, cy - ph, x + pw, cy + ph)
-        ev[#ev + 1] = rrect(x, cy - ph, x + pw, cy + ph, ph, live and LIVE or (hov and HOVER or SURF), live and "00" or "20")
-        ev[#ev + 1] = circle(x + 12 * u, cy, 3.5 * u, live and BG or (hov and LIVE or MUTED))
-        ev[#ev + 1] = text(x + 20 * u, cy, 4, fs, live and BG or (hov and BRIGHT or FG), esc(label), "\\b1")
-        if not live then
+        if behind < 12 and S.mode ~= "pipe" then
+            local label = tr("live", "LIVE")
+            local pw = text_w(label, fs) + 30 * u
+            ev[#ev + 1] = rrect(x, cy - ph, x + pw, cy + ph, ph, LIVE)
+            ev[#ev + 1] = circle(x + 12 * u, cy, 3.5 * u, BG)
+            ev[#ev + 1] = text(x + 20 * u, cy, 4, fs, BG, esc(label), "\\b1")
+        else
+            local ago = "−" .. fmt_time(behind)
+            ev[#ev + 1] = text(x, cy, 4, fs, FG, esc(ago))
+            x = x + text_w(ago, fs) + 10 * u
+            local label = tr("go_live", "Go live")
+            local pw = text_w(label, fs) + 40 * u
+            local hov = inside(mouse, x, cy - ph, x + pw, cy + ph)
+            ev[#ev + 1] = rrect(x, cy - ph, x + pw, cy + ph, ph, hov and BRIGHT or ACCENT)
+            ev[#ev + 1] = shape(icon.fwd(x + 15 * u, cy, fs * 0.42), BG)
+            ev[#ev + 1] = text(x + 27 * u, cy, 4, fs, BG, esc(label), "\\b1")
             hits[#hits + 1] = { x, cy - ph, x + pw, cy + ph, function() mp.command("script-binding openlive/live") end }
             if hov then tip(x + pw / 2, tr("go_live", "Go live") .. " (L)") end
         end
@@ -412,6 +421,45 @@ local function render_osc()
         button(rx, "chat", function() set_chat(not chat_on) end,
             (chat_on and tr("close_chat", "Close chat") or tr("open_chat", "Open chat")) .. " (C)", chat_on and ACCENT or nil)
         if chat_on then ev[#ev + 1] = circle(rx, cy + btn - 3 * u, 2 * u, ACCENT) end
+    end
+
+    -- quality: a pill with the current one; the list opens above it
+    local qs = S.qualities or {}
+    if #qs > 1 then
+        local label = (S.quality and S.quality ~= "") and S.quality or tr("quality", "Quality")
+        local ph = fs * 0.95
+        local pw = text_w(label, fs * 0.9) + 22 * u
+        local qx2 = rx - btn - math.floor(8 * u)
+        local qx1 = qx2 - pw
+        local hov = inside(mouse, qx1, cy - ph, qx2, cy + ph)
+        ev[#ev + 1] = rrect(qx1, cy - ph, qx2, cy + ph, 6 * u, (hov or menu_open) and HOVER or SURF, "20")
+        ev[#ev + 1] = text((qx1 + qx2) / 2, cy, 5, math.floor(fs * 0.9), menu_open and ACCENT or (hov and BRIGHT or FG), esc(label), "\\b1")
+        hits[#hits + 1] = { qx1, cy - ph, qx2, cy + ph, function() menu_open = not menu_open end, menu = true }
+        if hov and not menu_open then tip((qx1 + qx2) / 2, tr("quality", "Quality")) end
+        if menu_open then
+            local rh = math.floor(fs * 1.9)
+            local mw = math.max(pw, text_w("1080p60", fs) + 44 * u)
+            local mx2 = qx2
+            local mx1 = mx2 - mw
+            local my2 = cy - ph - 8 * u
+            local my1 = my2 - rh * #qs - 12 * u
+            ev[#ev + 1] = rrect(mx1, my1, mx2, my2, 8 * u, SURF, "08")
+            hits[#hits + 1] = { mx1, my1, mx2, my2, function() end, menu = true }  -- the padding (items added later win)
+            for i, name in ipairs(qs) do
+                local y1 = my1 + 6 * u + (i - 1) * rh
+                local on = name == S.quality
+                local hv = inside(mouse, mx1, y1, mx2, y1 + rh)
+                if hv then ev[#ev + 1] = rrect(mx1 + 4 * u, y1, mx2 - 4 * u, y1 + rh, 6 * u, HOVER) end
+                if on then ev[#ev + 1] = circle(mx1 + 14 * u, y1 + rh / 2, 3 * u, ACCENT) end
+                ev[#ev + 1] = text(mx1 + 26 * u, y1 + rh / 2, 4, fs, on and ACCENT or (hv and BRIGHT or FG), esc(name), on and "\\b1" or "")
+                hits[#hits + 1] = { mx1, y1, mx2, y1 + rh, function()
+                    menu_open = false
+                    mp.commandv("script-message", "openlive-quality", name)
+                end, menu = true }
+            end
+        end
+    elseif menu_open then
+        menu_open = false
     end
 
     -- tooltips last, above everything, kept inside the video area
@@ -458,6 +506,11 @@ mp.add_forced_key_binding("MBTN_LEFT", "click", function(e)
         return
     end
     local hb = m and visible() and hit_test(m.x, m.y)
+    if menu_open and not (hb and hb.menu) then  -- a click outside the quality list closes it
+        menu_open = false
+        render_osc()
+        return
+    end
     if hb then
         hb[5](m.x, e.event == "press")
         if hb.kind and e.event == "down" then dragging = hb end
@@ -475,6 +528,10 @@ local function wheel(d)
     mp.command(d > 0 and "script-binding openlive/forward" or "script-binding openlive/back")
 end
 
+mp.add_forced_key_binding("ESC", "close-menu", function()
+    if menu_open then menu_open = false; render_osc()
+    elseif mp.get_property_bool("fullscreen") then mp.set_property_bool("fullscreen", false) end
+end)
 mp.add_forced_key_binding("c", "toggle-chat", function() set_chat(not chat_on) end)
 mp.add_forced_key_binding("WHEEL_UP", "wheel-up", function() wheel(1) end)
 mp.add_forced_key_binding("WHEEL_DOWN", "wheel-down", function() wheel(-1) end)

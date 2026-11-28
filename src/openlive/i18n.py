@@ -217,6 +217,7 @@ ES = {
     "don't open a second player for a streamer already playing": "no abrir otro reproductor de un streamer que ya está abierto",
     "{name} is already open in your player.": "{name} ya está abierto en tu reproductor.",
     "Full screen": "Pantalla completa", "Open chat": "Abrir chat", "Close chat": "Cerrar chat",
+    "Quality: {q}": "Calidad: {q}",
     "Video player": "Reproductor de vídeo",
     "Quality": "Calidad",
     "Rewind and chat work with mpv, using openlive's own player look.": "Rebobinar y el chat funcionan con mpv, con el aspecto propio de openlive.",

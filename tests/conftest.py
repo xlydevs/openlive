@@ -21,7 +21,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(net, "fetch", no_network)
     monkeypatch.setattr(youtube, "search", no_network)  # yt-dlp, not net.fetch
     monkeypatch.setattr(chat, "_helix", no_network)
-    for name in ("_direct_url", "_youtube_hls"):
+    for name in ("_streams", "_youtube_hls"):
         monkeypatch.setattr(player, name, no_network)
     monkeypatch.setattr(updater, "latest", lambda force=False: None)
     i18n.set_lang("en")

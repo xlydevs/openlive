@@ -27,14 +27,27 @@ local yt_back = 0                      -- YouTube: seconds before live the playl
 local seg = tonumber(s.seg) or 5       -- YouTube segment length
 local dvr = tonumber(s.dvr) or 0       -- YouTube: how far back the channel lets you go (seconds)
 local lag = tonumber(s.lag) or 15      -- Kick: how far behind live its recording is
+local quality = s.quality or ""        -- name of the quality playing ("1080p60"); s.qualities lists them, best first
 
 local function say(text) if text then mp.osd_message(text, 2.5) end end
+
+local function url_of(list, name)
+    for _, q in ipairs(list or {}) do
+        if q.name == name then return q.url end
+    end
+end
+
+local function names()
+    local out = {}
+    for _, q in ipairs(s.qualities or {}) do out[#out + 1] = q.name end
+    return out
+end
 
 -- the interface script (openlive_ui.lua) reads the session and the current mode from here
 local function publish()
     mp.set_property_native("user-data/openlive", {
         platform = s.platform or "", mode = mode, lag = lag, title = s.title or "", channel = s.channel or "",
-        chat = s.chat or "", chat_on = s.chat_on ~= false, text = T,
+        chat = s.chat or "", chat_on = s.chat_on ~= false, text = T, quality = quality, qualities = names(),
     })
 end
 publish()
@@ -90,15 +103,53 @@ local function forward(sec)
     mp.commandv("seek", tostring(sec), "relative")
 end
 
+-- the newest moment mpv has: the end of its cache
+local function cache_end()
+    local st = mp.get_property_native("demuxer-cache-state") or {}
+    local e
+    for _, r in ipairs(st["seekable-ranges"] or {}) do e = math.max(e or r["end"], r["end"]) end
+    return e
+end
+
 local function go_live()
     if mode == "vod" and s.platform ~= "kick" then
         mp.commandv("seek", "-4", "absolute")  -- Twitch: the end of the growing recording is live
-    elseif mode ~= "live" and s.live then
+    elseif mode == "live" or mode == "pipe" then
+        local e = cache_end()                  -- rewound inside the cache: back to its end
+        if e then mp.commandv("seek", tostring(e - 1), "absolute") end
+    elseif s.live then
         yt_back = 0
         load(s.live, nil, nil, "live")
     end
     say(T.live)
 end
+
+-- another quality: the same stream from another playlist, carrying on where it was
+local function set_quality(name)
+    local url = url_of(s.qualities, name)
+    if not url or name == quality then return end
+    quality = name
+    local pos = mp.get_property_number("time-pos")
+    if s.platform == "twitch" and mode == "vod" then
+        load(url, pos and tostring(pos) or nil, nil, "vod")  -- every quality of the recording has the same timeline
+    else
+        s.live = url
+        if mode == "live" then
+            load(url, nil, nil, "live")
+        elseif mode == "dvr" then
+            load(url, nil, mp.get_property("demuxer-lavf-o"), "dvr")
+        elseif mode == "vod" then                 -- Kick's recording: its own playlists, same names
+            local vod = url_of(s.vod_qualities, name)
+            if vod then
+                s.vod = vod
+                load(vod, pos and tostring(pos) or nil, nil, "vod")
+            end
+        end
+    end
+    publish()
+    say((T.quality_set or "Quality: {q}"):gsub("{q}", name))
+end
+mp.register_script_message("openlive-quality", set_quality)
 
 -- Kick's recording is a snapshot: at its end, carry on live
 mp.observe_property("eof-reached", "bool", function(_, eof)

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Player: a Quality button lists the stream's resolutions; picking one carries on from the same moment.
+- Player: when you go back, a "Go live" button next to how far behind you are jumps to the newest moment. It also works now after a short rewind on Kick and YouTube.
+- Windows: no console window opens next to the player.
+- Windows: dragging the volume or the timeline no longer moves the window.
+
 ## 0.1.1 — 2026-11-28
 
 - Fixed a crash when opening a stream (Python 3.12 can't read the signature of `set.discard`).
