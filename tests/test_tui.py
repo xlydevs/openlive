@@ -276,3 +276,22 @@ async def test_update_dialog_updates_in_background(monkeypatch):
         app._update_found("9.9.10")
         await pilot.pause(0.1)
         assert not isinstance(app.screen, onboard.UpdateScreen)
+
+
+async def test_opening_a_stream_does_not_crash(monkeypatch):
+    """Opening a stream must not touch inspect.signature: set.discard has none on Python 3.12."""
+    config.OFFLINE = True
+    from openlive import player
+    from openlive.tui import OpenLive, make_app
+    monkeypatch.setattr(OpenLive, "action_login", lambda self: None)
+    monkeypatch.setattr(player, "play", lambda r, title, client: (True, ""))
+    monkeypatch.setattr(player, "find_player", lambda: ("vlc", "/usr/bin/vlc"))
+    row = {"platform": "twitch", "login": "someone", "name": "Someone", "live": True, "title": "t", "game": "g"}
+    app = make_app()
+    async with app.run_test(size=(160, 48)) as pilot:
+        await pilot.pause(0.2)
+        app.opening.add(player.channel_key(row))
+        app.open_player(row)
+        await app.workers.wait_for_complete()
+        await pilot.pause(0.1)
+        assert player.channel_key(row) not in app.opening

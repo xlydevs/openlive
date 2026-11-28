@@ -748,10 +748,11 @@ class OpenLive(App):
 
     @work(thread=True, group="player")
     def open_player(self, r):
+        key = player.channel_key(r)
         try:
             ok, why = player.play(r, r["title"], self.client)
         finally:
-            self.call_from_thread(self.opening.discard, player.channel_key(r))
+            self.call_from_thread(lambda: self.opening.discard(key))
         if not ok:
             self.call_from_thread(self._player_failed, why, r)
             return
