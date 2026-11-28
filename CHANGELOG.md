@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-11-28
 
 - Player: a Quality button lists the stream's resolutions; picking one carries on from the same moment.
 - Player: when you go back, a "Go live" button next to how far behind you are jumps to the newest moment. It also works now after a short rewind on Kick and YouTube.
