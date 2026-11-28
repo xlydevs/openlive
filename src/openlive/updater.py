@@ -17,7 +17,7 @@ from . import __version__, config, net
 
 REPO = "https://github.com/xlydevs/openlive"
 VERSION_URL = "https://raw.githubusercontent.com/xlydevs/openlive/main/src/openlive/__init__.py"
-CHECK_EVERY = 6 * 3600
+CHECK_EVERY = 3600  # while openlive is open; every start checks right away
 STATE = "update.json"
 
 
@@ -30,7 +30,7 @@ def source():
 
 
 def latest(force=False):
-    """The version on GitHub (checked at most every few hours), or None when it can't be told."""
+    """The version on GitHub (checked at most once an hour unless forced), or None when it can't be told."""
     state = config.read_json(STATE) or {}
     if not force and time.time() - state.get("checked", 0) < CHECK_EVERY:
         return state.get("version")

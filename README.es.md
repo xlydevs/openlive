@@ -164,7 +164,7 @@ uvx ruff check .
 vhs scripts/demo.tape                     # docs/demo.gif
 ```
 
-Publicar una actualización: sube `__version__` en `src/openlive/__init__.py` y haz push a `main`. Las copias instaladas ven el número nuevo en unas horas y ofrecen actualizarse.
+Publicar una actualización: sube `__version__` en `src/openlive/__init__.py` y haz push a `main`. openlive lo comprueba cada vez que se abre y una vez por hora mientras está abierto, y entonces ofrece actualizarse.
 
 Usar tu propia app de Twitch: crea una app **Public** en [dev.twitch.tv](https://dev.twitch.tv/console/apps/create) (redirección `http://localhost`) y pon `client_id` en la configuración o en `$OPENLIVE_CLIENT_ID`.
 

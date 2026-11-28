@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Looks for a new version every time openlive starts and once an hour while it is open (it was every 6 hours).
+
 ## 0.1.2 — 2026-11-28
 
 - Player: a Quality button lists the stream's resolutions; picking one carries on from the same moment.

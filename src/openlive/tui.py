@@ -421,7 +421,8 @@ class OpenLive(App):
         self.update_bar()
         self.pane("live").table.focus()
         if not config.OFFLINE and config.get("check_updates", True):
-            self.check_update()
+            self.check_update(force=True)  # one tiny request on every start
+            self.set_interval(updater.CHECK_EVERY, self.check_update)
         if not self.platforms:
             self.call_after_refresh(self.action_platforms, True)
         else:
@@ -767,11 +768,13 @@ class OpenLive(App):
         self.push_screen(onboard.PlayerSetupScreen(upgrade=True, version=v))
 
     @work(thread=True, group="update", exclusive=True)
-    def check_update(self):
-        if v := updater.newer():
+    def check_update(self, force=False):
+        if v := updater.newer(force):
             self.call_from_thread(self._update_found, v)
 
     def _update_found(self, v):
+        if v == self.new_version:
+            return
         self.new_version = v
         self.update_bar()
         if config.get("update_skipped") != v:  # the dialog once per version; later the bar keeps a reminder (u)
