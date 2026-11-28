@@ -6,7 +6,7 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 
 [Español](README.es.md)
 
-![openlive demo](docs/demo.gif)
+![openlive demo](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/demo.gif)
 
 ## Features
 
@@ -27,9 +27,9 @@ It runs on your computer and talks only to those sites. Twitch sign-in takes a c
 
 | Following | Add Kick / YouTube channels |
 |---|---|
-| ![Following](docs/screenshots/following.svg) | ![Add channels](docs/screenshots/add-channels.svg) |
+| ![Following](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/following.svg) | ![Add channels](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/add-channels.svg) |
 | **Search (every platform)** | **Settings** |
-| ![Search](docs/screenshots/search.svg) | ![Settings](docs/screenshots/settings.svg) |
+| ![Search](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/search.svg) | ![Settings](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/settings.svg) |
 
 ## Install
 

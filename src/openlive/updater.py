@@ -57,29 +57,46 @@ def uv_path():
                                        if p.exists()), None)
 
 
-def installed_from_github():
-    """True for installs made by openlive's installers: a uv tool from the GitHub archive (not editable, not pipx)."""
+def how_installed():
+    """"github" (openlive's installers: a uv tool from the GitHub archive), "uv" (uv tool from PyPI), "pipx",
+    "pip" (from PyPI some other way) or "source" (a checkout, editable)."""
     try:
         info = json.loads(metadata.distribution("openlive").read_text("direct_url.json") or "{}")
     except (metadata.PackageNotFoundError, ValueError, OSError):
-        return False
-    return info.get("url", "").startswith(f"{REPO}/archive/") and "uv" in Path(sys.prefix).parts
+        return "source"
+    parts = Path(sys.prefix).parts
+    if info.get("url", "").startswith(f"{REPO}/archive/"):
+        return "github" if "uv" in parts else "source"
+    if info:  # a local folder or another URL
+        return "source"
+    return "uv" if "uv" in parts else "pipx" if "pipx" in parts else "pip"
+
+
+def installed_from_github():
+    return how_installed() == "github"
 
 
 def command():
+    if how_installed() == "uv":
+        return [uv_path() or "uv", "tool", "upgrade", "openlive"]
     return [uv_path() or "uv", "tool", "install", "--force", "--python", "3.12", "--refresh-package", "openlive",
             "--reinstall-package", "openlive", f"openlive @ {source()}"]
 
 
 def manual_command():
     """What to run by hand when openlive can't update itself."""
+    how = how_installed()
+    if how == "pipx":
+        return "pipx upgrade openlive"
+    if how == "pip":
+        return "pip install --upgrade openlive"
     if config.WIN:
         return "irm https://raw.githubusercontent.com/xlydevs/openlive/main/install.ps1 | iex"
     return "curl -LsSf https://raw.githubusercontent.com/xlydevs/openlive/main/install.sh | sh"
 
 
 def can_update():
-    return installed_from_github() and uv_path() is not None
+    return how_installed() in ("github", "uv") and uv_path() is not None
 
 
 def update():

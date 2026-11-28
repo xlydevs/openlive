@@ -6,7 +6,7 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 
 [English](README.md)
 
-![demo de openlive](docs/demo.gif)
+![demo de openlive](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/demo.gif)
 
 ## Funciones
 
@@ -27,9 +27,9 @@ Funciona en tu ordenador y solo habla con esas webs. Para entrar en Twitch basta
 
 | Siguiendo | Añadir canales de Kick / YouTube |
 |---|---|
-| ![Siguiendo](docs/screenshots/following.svg) | ![Añadir canales](docs/screenshots/add-channels.svg) |
+| ![Siguiendo](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/following.svg) | ![Añadir canales](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/add-channels.svg) |
 | **Buscar (todas las plataformas)** | **Ajustes** |
-| ![Buscar](docs/screenshots/search.svg) | ![Ajustes](docs/screenshots/settings.svg) |
+| ![Buscar](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/search.svg) | ![Ajustes](https://raw.githubusercontent.com/xlydevs/openlive/main/docs/screenshots/settings.svg) |
 
 ## Instalación
 
